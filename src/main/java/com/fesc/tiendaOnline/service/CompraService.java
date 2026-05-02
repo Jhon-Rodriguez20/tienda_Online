@@ -35,7 +35,6 @@ import com.fesc.tiendaOnline.repository.UsuarioRepository;
 public class CompraService {
 
     private final CompraRepository compraRepository;
-    private final CompraDetalleRepository compraDetalleRepository;
     private final ProductoRepository productoRepository;
     private final UsuarioRepository usuarioRepository;
     private final MetodoPagoRepository metodoPagoRepository;
@@ -48,7 +47,6 @@ public class CompraService {
             AdminValidationService adminValidationService) {
         
         this.compraRepository = compraRepository;
-        this.compraDetalleRepository = compraDetalleRepository;
         this.productoRepository = productoRepository;
         this.usuarioRepository = usuarioRepository;
         this.metodoPagoRepository = metodoPagoRepository;
@@ -58,65 +56,57 @@ public class CompraService {
 
     // CREAR COMPRA - SOLO CLIENTES
     @Transactional
-    public CompraResponseDTO realizarCompra(CompraRequestDTO request, UUID usuarioId) {
-        UsuarioEntity usuarioEntity = usuarioRepository.findById(usuarioId)
-            .orElseThrow(() -> new BusinessRuleException("Usuario no encontrado"));
-
-        MetodoPagoCompraEntity metodoPagoCompraEntity = metodoPagoRepository.findById(request.getIdMetodoPago())
-            .orElseThrow(() -> new BusinessRuleException("Método de pago no encontrado"));
-
-        // Validar stock del producto y calcular el total
+    public CompraResponseDTO realizarCompra(CompraRequestDTO request, UUID usuarioId) {     
+        UsuarioEntity usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new BusinessRuleException("Usuario no encontrado"));
+        
+        MetodoPagoCompraEntity metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
+                .orElseThrow(() -> new BusinessRuleException("Método de pago no encontrado"));
+        
         double totalPagado = 0.0;
-        List<CompraDetalleEntity> detalles = new ArrayList<>();
-
-        for (CompraRequestDTO.ItemCompraDTO item : request.getItems()) {
-            ProductoEntity productoEntity = productoRepository.findById(item.getIdProducto())
-                .orElseThrow(() -> new BusinessRuleException("Producto no encontrado"));
-
-            if (productoEntity.getStockProducto() < item.getCantidad()) {
-                throw new BusinessRuleException("Stock insuficiente para el producto: " + productoEntity.getNombreProducto() +
-                                ". Stock disponible: " + productoEntity.getStockProducto());
-            }
-
-            // Crear detalle
-            CompraDetalleEntity detalle = new CompraDetalleEntity();
-            detalle.setProducto(productoEntity);
-            detalle.setCantidad(item.getCantidad());
-            detalle.setPrecioUnitario(productoEntity.getPrecioProducto());
-            detalle.setSubtotal(productoEntity.getPrecioProducto() * item.getCantidad());
-            detalles.add(detalle);
-
-            totalPagado += detalle.getSubtotal();
-
-            // Actualizar el stock
-            productoEntity.setStockProducto(productoEntity.getStockProducto() - item.getCantidad());
-            productoRepository.save(productoEntity);
-        }
-
-        // Generar número de compra
+        
+        // Generar número de compra único
         String numeroCompra;
         do {
             numeroCompra = numeroCompraGenerator.generarNumeroCompra();
         } while (compraRepository.existsByNumeroCompra(numeroCompra));
-
+        
         // Crear compra
-        CompraEntity compraEntity = new CompraEntity();
-        compraEntity.setNumeroCompra(numeroCompra);
-        compraEntity.setTotalPagado(totalPagado);
-        compraEntity.setFechaCompra(LocalDateTime.now());
-        compraEntity.setCompraEstado(CompraEstado.PENDIENTE);
-        compraEntity.setIdMetodoPago(metodoPagoCompraEntity);
-        compraEntity.setUsuario(usuarioEntity);
-
-        CompraEntity compraGuardada = compraRepository.save(compraEntity);
-
-        // Asociar detalles a la compra
-        for (CompraDetalleEntity detalle : detalles) {
-            detalle.setCompra(compraGuardada);
-            compraDetalleRepository.save(detalle);
+        CompraEntity compra = new CompraEntity();
+        compra.setNumeroCompra(numeroCompra);
+        compra.setTotalPagado(totalPagado);
+        compra.setFechaCompra(LocalDateTime.now());
+        compra.setCompraEstado(CompraEstado.PENDIENTE);
+        compra.setIdMetodoPago(metodoPago);
+        compra.setUsuario(usuario);
+        
+        // Procesar items y crear detalles
+        for (CompraRequestDTO.ItemCompraDTO item : request.getItems()) {
+            ProductoEntity producto = productoRepository.findById(item.getIdProducto())
+                    .orElseThrow(() -> new BusinessRuleException("Producto no encontrado: " + item.getIdProducto()));
+            
+            if (producto.getStockProducto() < item.getCantidad()) {
+                throw new BusinessRuleException("Stock insuficiente para el producto: " + producto.getNombreProducto());
+            }
+            
+            CompraDetalleEntity detalle = new CompraDetalleEntity();
+            detalle.setProducto(producto);
+            detalle.setCantidad(item.getCantidad());
+            detalle.setPrecioUnitario(producto.getPrecioProducto());
+            detalle.setSubtotal(producto.getPrecioProducto() * item.getCantidad());
+            
+            compra.addDetalle(detalle);
+            
+            totalPagado += detalle.getSubtotal();
+            
+            producto.setStockProducto(producto.getStockProducto() - item.getCantidad());
+            productoRepository.save(producto);
         }
-        System.out.println("Detalles guardados: " + compraDetalleRepository.findAll().size());
-        System.out.println("Detalles de la compra: " + compraGuardada.getDetalles().size());
+        
+        compra.setTotalPagado(totalPagado);
+        
+        CompraEntity compraGuardada = compraRepository.save(compra);
+                
         return convertirAResponseDTO(compraGuardada);
     }
 
@@ -218,9 +208,8 @@ public class CompraService {
             throw new BusinessRuleException("Estado no válido.");
         }
 
-        CompraEstado estadoActual = compraEntity.getCompraEstado();
-
         // Validaciones del estado
+        CompraEstado estadoActual = compraEntity.getCompraEstado();
         if (estadoActual == CompraEstado.CANCELADO) {
             throw new BusinessRuleException("No se puede modificar una compra cancelada");
         }
@@ -233,7 +222,6 @@ public class CompraService {
         if (estadoActual == CompraEstado.ACEPTADO && nuevoEstado != CompraEstado.ENTREGADO) {
             throw new BusinessRuleException("Desde ACEPTADO solo se puede pasar a ENTREGADO");
         }
-
         compraEntity.setCompraEstado(nuevoEstado);
         CompraEntity compraActualizada = compraRepository.save(compraEntity);
         
@@ -250,7 +238,7 @@ public class CompraService {
         response.setMetodoPago(compra.getIdMetodoPago().getMetodoPago());
         
         List<CompraResponseDTO.CompraDetalleResponseDTO> detalles = new ArrayList<>();
-        if (compra.getDetalles() != null) {
+        if (compra.getDetalles() != null && !compra.getDetalles().isEmpty()) {
             for (CompraDetalleEntity detalle : compra.getDetalles()) {
                 CompraResponseDTO.CompraDetalleResponseDTO detalleDTO = new CompraResponseDTO.CompraDetalleResponseDTO();
                 detalleDTO.setIdProducto(detalle.getProducto().getIdProducto());

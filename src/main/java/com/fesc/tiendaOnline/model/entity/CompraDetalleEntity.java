@@ -6,6 +6,7 @@ import org.hibernate.annotations.UuidGenerator;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -16,26 +17,26 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "compraDetalle")
+@Table(name = "compra_detalle")
 public class CompraDetalleEntity {
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idCompraDetalle", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_compra_detalle", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idCompraDetalle;
 
-    @ManyToOne
-    @JoinColumn(name = "idCompra", referencedColumnName = "idCompra", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "id_compra", referencedColumnName = "id_compra", nullable = false)
     private CompraEntity compra;
 
-    @ManyToOne
-    @JoinColumn(name = "idProducto", referencedColumnName = "idProducto", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "id_producto", referencedColumnName = "id_producto", nullable = false)
     private ProductoEntity producto;
 
     @Column(name = "cantidad", nullable = false)
     private Integer cantidad;
 
-    @Column(name = "precioUnitario", nullable = false)
+    @Column(name = "precio_unitario", nullable = false)
     private Double precioUnitario;
 
     @Column(name = "subtotal", nullable = false)

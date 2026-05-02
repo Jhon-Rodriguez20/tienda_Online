@@ -21,29 +21,29 @@ public class ProductoEntity {
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idProducto", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_producto", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idProducto;
 
-    @Column(name = "nombreProducto", length = 50, nullable = false, unique = true)
+    @Column(name = "nombre_producto", length = 50, nullable = false, unique = true)
     private String nombreProducto;
 
-    @Column(name = "descripcionProducto", length = 200, nullable = false)
+    @Column(name = "descripcion_producto", length = 200, nullable = false)
     private String descripcionProducto;
 
-    @Column(name = "precioProducto", nullable = false)
+    @Column(name = "precio_producto", nullable = false)
     private Double precioProducto;
 
-    @Column(name = "stockProducto", nullable = false)
+    @Column(name = "stock_producto", nullable = false)
     private Integer stockProducto;
 
-    @Column(name = "urlImagenProducto", length = 150, nullable = false)
+    @Column(name = "url_imagen_producto", length = 150, nullable = false)
     private String urlImagenProducto;
 
     @ManyToOne
-    @JoinColumn(name = "idProductoCategoria", referencedColumnName = "idCategoria", nullable = false)
+    @JoinColumn(name = "id_producto_categoria", referencedColumnName = "id_categoria", nullable = false)
     private CategoriaEntity categoria;
 
     @ManyToOne
-    @JoinColumn(name = "idUsuario", referencedColumnName = "idUsuario", nullable = false)
+    @JoinColumn(name = "id_usuario", referencedColumnName = "id_usuario", nullable = false)
     private UsuarioEntity usuario;
 }

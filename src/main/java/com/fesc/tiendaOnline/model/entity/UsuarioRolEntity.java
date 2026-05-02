@@ -19,15 +19,15 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "usuarioRol")
+@Table(name = "usuario_rol")
 public class UsuarioRolEntity {
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idUsuarioRol", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_usuario_rol", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idUsuarioRol;
 
-    @Column(name = "rolUsuario", length = 13, nullable = false, unique = true)
+    @Column(name = "rol_usuario", length = 13, nullable = false, unique = true)
     private String rolUsuario;
     
     @OneToMany(mappedBy = "usuarioRol", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

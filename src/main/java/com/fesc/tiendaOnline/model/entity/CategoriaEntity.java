@@ -19,12 +19,12 @@ public class CategoriaEntity {
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idCategoria", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_categoria", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idCategoria;
 
-    @Column(name = "nombreCategoria", length = 50, nullable = false, unique = true)
+    @Column(name = "nombre_categoria", length = 50, nullable = false, unique = true)
     private String nombreCategoria;
 
-    @Column(name = "descripcionCategoria", length = 200, nullable = false)
+    @Column(name = "descripcion_categoria", length = 200, nullable = false)
     private String descripcionCategoria;
 }

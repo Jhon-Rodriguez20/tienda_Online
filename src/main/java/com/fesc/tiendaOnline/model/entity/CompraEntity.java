@@ -29,30 +29,35 @@ public class CompraEntity {
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idCompra", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_compra", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idCompra;
 
-    @Column(name = "numeroCompra", length = 6, nullable = false, unique = true)
+    @Column(name = "numero_compra", length = 6, nullable = false, unique = true)
     private String numeroCompra;
 
-    @Column(name = "totalPagado", nullable = false)
+    @Column(name = "total_pagado", nullable = false)
     private Double totalPagado;
 
-    @Column(name = "fechaCompra", nullable = false)
+    @Column(name = "fecha_compra", nullable = false)
     private LocalDateTime fechaCompra;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "compraEstado", nullable = false)
+    @Column(name = "compra_estado", nullable = false)
     private CompraEstado compraEstado;
 
     @ManyToOne
-    @JoinColumn(name = "idMetodoPago", referencedColumnName = "idMetodoPago", nullable = false)
+    @JoinColumn(name = "id_metodo_pago", referencedColumnName = "id_metodo_pago", nullable = false)
     private MetodoPagoCompraEntity idMetodoPago;
 
     @ManyToOne
-    @JoinColumn(name = "idUsuario", referencedColumnName = "idUsuario", nullable = false)
+    @JoinColumn(name = "id_usuario", referencedColumnName = "id_usuario", nullable = false)
     private UsuarioEntity usuario;
 
-    @OneToMany(mappedBy = "compra", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "compra", cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
     private List<CompraDetalleEntity> detalles = new ArrayList<>();
+    
+    public void addDetalle(CompraDetalleEntity detalle) {
+        detalles.add(detalle);
+        detalle.setCompra(this);
+    }
 }

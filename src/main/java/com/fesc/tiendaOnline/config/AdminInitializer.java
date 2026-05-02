@@ -38,7 +38,7 @@ public class AdminInitializer implements CommandLineRunner {
             UsuarioEntity admin = new UsuarioEntity();
             admin.setNombre("Administrador");
             admin.setEmail("developjarz@gmail.com");
-            admin.setContrasenaEncp(passwordEncoder.encode("Canchos02026"));
+            admin.setContrasenaEncp(passwordEncoder.encode("C46sjfe-084-kvuw94hn-ldo0-hd3-948"));
             admin.setEstado(UsuarioEstado.ACTIVO);
             admin.setUsuarioRol(rolAdmin);
             admin.setIntentosEnvioCodigoVerificacion(0);

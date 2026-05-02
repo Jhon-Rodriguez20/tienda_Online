@@ -27,7 +27,7 @@ public class UsuarioEntity {
     
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idUsuario", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_usuario", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idUsuario;
 
     @Column(name = "nombre", length = 100, nullable = false)
@@ -41,16 +41,16 @@ public class UsuarioEntity {
     private UsuarioEstado estado;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "idUsuarioRol", referencedColumnName = "idUsuarioRol", nullable = false)
+    @JoinColumn(name = "id_usuario_rol", referencedColumnName = "id_usuario_rol", nullable = false)
     private UsuarioRolEntity usuarioRol;
 
-    @Column(name = "urlImagen", length = 100, nullable = false)
+    @Column(name = "url_imagen", length = 100, nullable = false)
     private String urlImagen;
 
-    @Column(name = "intentosEnvioCodigoVerificacion", nullable = false)
+    @Column(name = "intentos_envio_codigo_verificacion", nullable = false)
     private Integer intentosEnvioCodigoVerificacion = 0;
 
-    @Column(name = "bloqueadoHasta", nullable = true)
+    @Column(name = "bloqueado_hasta", nullable = true)
     private LocalDateTime bloqueadoHasta;
 
     @Column(name = "contrasenaEncp", length = 100, nullable = false)

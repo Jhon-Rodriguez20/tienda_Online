@@ -19,7 +19,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "usuarioCodigoVerificacion", 
+@Table(name = "usuario_codigo_verificacion",
     uniqueConstraints = @UniqueConstraint(columnNames = "idUsuario"))
 public class UsuarioCodigoVerificacionEntity {
 
@@ -29,10 +29,10 @@ public class UsuarioCodigoVerificacionEntity {
     private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "idUsuario", referencedColumnName = "idUsuario", nullable = false, unique = true)
+    @JoinColumn(name = "id_usuario", referencedColumnName = "id_usuario", nullable = false, unique = true)
     private UsuarioEntity usuario;
 
-    @Column(name = "codigoVerificacion", length = 6, nullable = false)
+    @Column(name = "codigo_verificacion", length = 6, nullable = false)
     private String codigoVerificacion;
 
     @Column(name = "expiracion", nullable = false)

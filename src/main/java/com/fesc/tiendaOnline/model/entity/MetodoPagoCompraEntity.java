@@ -14,14 +14,14 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "compraMetodoPago")
+@Table(name = "compra_metodo_pago")
 public class MetodoPagoCompraEntity {
     
     @Id
     @UuidGenerator(style = UuidGenerator.Style.TIME)
-    @Column(name = "idMetodoPago", columnDefinition = "UUID", updatable = false, nullable = false)
+    @Column(name = "id_metodo_pago", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idMetodoPago;
 
-    @Column(name = "metodoPago", length = 50, nullable = false, unique = true)
+    @Column(name = "metodo_pago", length = 50, nullable = false, unique = true)
     private String metodoPago;
 }
