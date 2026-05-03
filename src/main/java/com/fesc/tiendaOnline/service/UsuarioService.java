@@ -9,7 +9,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fesc.tiendaOnline.exception.NotFoundException;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
 import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.CancelarCuentaDTO;
@@ -49,6 +48,7 @@ public class UsuarioService {
             EmailService emailService,
             UsuarioBloqueadoService bloqueoService,
             UsuarioValidationService usuarioValidationService) {
+        
         this.usuarioRepository = usuarioRepository;
         this.usuarioCodigoVerificacionRepository = usuarioCodigoVerificacionRepository;
         this.emailService = emailService;
@@ -64,6 +64,12 @@ public class UsuarioService {
         UsuarioEntity usuario = new UsuarioEntity();
         usuario.setNombre(usuarioCreateDTO.getNombre());
         usuario.setEmail(usuarioCreateDTO.getEmail());
+        usuario.setTelefono(usuarioCreateDTO.getTelefono());
+        usuario.setPais(usuarioCreateDTO.getPais());
+        usuario.setDireccion(usuarioCreateDTO.getDireccion());
+        usuario.setCiudad(usuarioCreateDTO.getCiudad());
+        usuario.setCodigoPostal(usuarioCreateDTO.getCodigoPostal());
+        usuario.setDepartamento(usuarioCreateDTO.getDepartamento());
         usuario.setContrasenaEncp(passwordEncoder.encode(usuarioCreateDTO.getContrasena()));
         usuario.setEstado(UsuarioEstado.INACTIVO);
         usuario.setUsuarioRol(rol);
@@ -221,15 +227,16 @@ public class UsuarioService {
         responseDTO.setIdUsuario(usuarioEntity.getIdUsuario());
         responseDTO.setNombre(usuarioEntity.getNombre());
         responseDTO.setEmail(usuarioEntity.getEmail());
+        responseDTO.setTelefono(usuarioEntity.getTelefono());
+        responseDTO.setPais(usuarioEntity.getPais());
+        responseDTO.setDireccion(usuarioEntity.getDireccion());
+        responseDTO.setDepartamento(usuarioEntity.getDepartamento());
+        responseDTO.setCiudad(usuarioEntity.getCiudad());
+        responseDTO.setCodigoPostal(usuarioEntity.getCodigoPostal() != null ? usuarioEntity.getCodigoPostal() : "Sin código postal");
         responseDTO.setEstado(usuarioEntity.getEstado().toString());
         responseDTO.setRol(usuarioEntity.getUsuarioRol().getRolUsuario());
         responseDTO.setUrlImagen(usuarioEntity.getUrlImagen());
+        
         return responseDTO;
-    }
-
-    public UsuarioResponseDTO obtenerUsuarioPorId(UUID id) {
-        UsuarioEntity usuario = usuarioRepository.findByIdWithCodigo(id)
-            .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
-        return convertirAResponseDTO(usuario);
     }
 }

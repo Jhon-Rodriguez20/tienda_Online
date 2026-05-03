@@ -10,6 +10,12 @@ public class UsuarioResponseDTO {
     private UUID idUsuario;
     private String nombre;
     private String email;
+    private String telefono;
+    private String pais;
+    private String direccion;
+    private String departamento;
+    private String ciudad;
+    private String codigoPostal;
     private String estado;
     private String rol;
     private String urlImagen;

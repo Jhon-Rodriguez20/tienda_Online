@@ -36,6 +36,24 @@ public class UsuarioEntity {
     @Column(name = "email", length = 100, nullable = false, unique = true)
     private String email;
 
+    @Column(name = "telefono", length = 20, nullable = false, unique = true)
+    private String telefono;
+
+    @Column(name = "pais", length = 30, nullable = false)
+    private String pais;
+
+    @Column(name = "direccion", length = 100, nullable = false)
+    private String direccion;
+
+    @Column(name = "departamento", length = 50, nullable = false)
+    private String departamento;
+
+    @Column(name = "ciudad", length = 50, nullable = false)
+    private String ciudad;
+
+    @Column(name = "codigo_postal", length = 17, nullable = true)
+    private String codigoPostal;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false)
     private UsuarioEstado estado;

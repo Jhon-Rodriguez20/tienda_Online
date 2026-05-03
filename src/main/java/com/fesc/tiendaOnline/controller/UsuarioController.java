@@ -41,7 +41,6 @@ public class UsuarioController {
     @PostMapping("/registro")
     public ResponseEntity<UsuarioResponseDTO> registrarUsuario(@Valid @RequestBody UsuarioCreateDTO usuarioCreateDTO) {
         UsuarioResponseDTO usuarioCreado = usuarioService.crearUsuario(usuarioCreateDTO);
-
         return new ResponseEntity<>(usuarioCreado, HttpStatus.CREATED);
     }
 
@@ -51,7 +50,6 @@ public class UsuarioController {
         Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Código verificado correctamente.");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
     }
 
@@ -61,7 +59,6 @@ public class UsuarioController {
         usuarioService.reenviarCodigoVerificacion(usuarioReenvioCodigoDTO);
         response.put("mensaje", "Código de verificación reenviado exitosamente.");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
     }
 
@@ -71,7 +68,6 @@ public class UsuarioController {
         Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Código de recuperación enviado exitosamente.");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
     }
     
@@ -81,7 +77,6 @@ public class UsuarioController {
         Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Código de recuperación verificado correctamente.");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
     }
 
@@ -91,7 +86,6 @@ public class UsuarioController {
         Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Contraseña cambiada correctamente.");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
     }
 
