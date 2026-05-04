@@ -1,66 +1,81 @@
 package com.fesc.tiendaOnline.service;
 
-import java.security.Key;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
+import org.springframework.core.io.Resource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
+import com.fesc.tiendaOnline.model.entity.UsuarioEstado;
+import com.fesc.tiendaOnline.security.UserDetailsImpl;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class JwtService {
 
-    @Value("${jwt.secret}")
-    private String secret;
-
     @Value("${jwt.expiration}")
     private Long expiration;
 
-    private Key getSigningKey() {
-        byte [] keyBytes = secret.getBytes();
-        return Keys.hmacShaKeyFor(keyBytes);
+    @Value("${jwt.issuer:tienda-online-api}")
+    private String issuer;
+
+    @Value("${jwt.audience:tienda-online-client}")
+    private String audience;
+
+    @Value("${jwt.private-key-location}")
+    private Resource privateKeyResource;
+
+    @Value("${jwt.public-key-location}")
+    private Resource publicKeyResource;
+
+    private final Clock clock = Clock.systemUTC();
+
+    private RSAPrivateKey privateKey;
+    private RSAPublicKey publicKey;
+
+    @PostConstruct
+    void loadKeys() throws Exception {
+        privateKey = readPrivateKey(privateKeyResource);
+        publicKey = readPublicKey(publicKeyResource);
     }
 
     public String generateToken(UsuarioEntity usuario) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("idUsuario", usuario.getIdUsuario());
-        claims.put("nombre", usuario.getNombre());
-        claims.put("usuarioRol", usuario.getUsuarioRol().getRolUsuario());
-        claims.put("fechaCreacion", new Date());
+        Instant now = clock.instant();
+        Instant expiresAt = now.plusMillis(expiration);
 
         return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(usuario.getEmail())
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .setHeaderParam("typ", "JWT")
+                .setId(UUID.randomUUID().toString())
+                .setSubject(usuario.getIdUsuario().toString())
+                .setIssuer(issuer)
+                .setAudience(audience)
+                .setIssuedAt(Date.from(now))
+                .setNotBefore(Date.from(now))
+                .setExpiration(Date.from(expiresAt))
+                .signWith(privateKey, SignatureAlgorithm.RS256)
                 .compact();
     }
 
-    public String extractEmail(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
-
-    public Long extractIdUsuario(String token) {
-        return extractClaim(token, claims -> claims.get("idUsuario", Long.class));
-    }
-
-    public String extractNombre(String token) {
-        return extractClaim(token, claims -> claims.get("nombre", String.class));
-    }
-
-    public String extractUsuarioRol(String token) {
-        return extractClaim(token, claims -> claims.get("usuarioRol", String.class));
+    public UUID extractIdUsuario(String token) {
+        return UUID.fromString(extractClaim(token, Claims::getSubject));
     }
 
     public Date extractExpirationToken(String token) {
@@ -74,7 +89,10 @@ public class JwtService {
 
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+                .setSigningKey(publicKey)
+                .requireIssuer(issuer)
+                .requireAudience(audience)
+                .setAllowedClockSkewSeconds(30)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
@@ -85,16 +103,48 @@ public class JwtService {
     }
 
     public Boolean validateToken(String token, UsuarioEntity usuario) {
-        final String email = extractEmail(token);
-        return (email.equals(usuario.getEmail()) && !isTokenExpired(token));
+        final UUID idUsuario = extractIdUsuario(token);
+        return idUsuario.equals(usuario.getIdUsuario())
+            && UsuarioEstado.ACTIVO.equals(usuario.getEstado())
+            && !isTokenExpired(token);
     }
 
     public Boolean validateToken(String token, UserDetails userDetails) {
-        final String email = extractEmail(token);
-        return (email.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        Claims claims = extractAllClaims(token);
+        UserDetailsImpl userDetailsImpl = (UserDetailsImpl) userDetails;
+
+        return claims.getSubject().equals(userDetailsImpl.getUsuario().getIdUsuario().toString())
+            && userDetails.isEnabled()
+            && !isTokenExpired(token);
     }
 
     public Long getExpirationTimeToken() {
         return expiration / 1000;
+    }
+
+    private RSAPrivateKey readPrivateKey(Resource resource) throws Exception {
+        String pem = readPem(resource);
+        String key = pem
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
+        byte[] decoded = Base64.getDecoder().decode(key);
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
+        return (RSAPrivateKey) KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+    }
+
+    private RSAPublicKey readPublicKey(Resource resource) throws Exception {
+        String pem = readPem(resource);
+        String key = pem
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replaceAll("\\s", "");
+        byte[] decoded = Base64.getDecoder().decode(key);
+        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decoded);
+        return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(keySpec);
+    }
+
+    private String readPem(Resource resource) throws IOException {
+        return new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
     }
 }

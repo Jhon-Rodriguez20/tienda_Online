@@ -25,14 +25,4 @@ public class AdminValidationService {
         }
         return usuario;
     }
-    
-    public UsuarioEntity validarAdminPorEmail(String email) {
-        UsuarioEntity usuario = usuarioRepository.findByEmailWithRol(email)
-            .orElseThrow(() -> new BusinessRuleException("Usuario no encontrado"));
-        
-        if (!usuario.getUsuarioRol().getRolUsuario().equals("ADMIN")) {
-            throw new BusinessRuleException("No tienes permisos para realizar esta acción");
-        }
-        return usuario;
-    }
 }

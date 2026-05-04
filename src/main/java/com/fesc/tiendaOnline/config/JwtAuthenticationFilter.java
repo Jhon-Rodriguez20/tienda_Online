@@ -1,6 +1,7 @@
 package com.fesc.tiendaOnline.config;
 
 import java.io.IOException;
+import java.util.UUID;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -12,6 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.fesc.tiendaOnline.service.JwtService;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,20 +43,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         
-        final String token = authHeader.substring(7);
-        final String email = jwtService.extractEmail(token);
-        
-        if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(email);
-            
-            if (jwtService.validateToken(token, 
-                    ((com.fesc.tiendaOnline.security.UserDetailsImpl) userDetails).getUsuario())) {
-                
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+        try {
+            final String token = authHeader.substring(7);
+            final UUID idUsuario = jwtService.extractIdUsuario(token);
+
+            if (idUsuario != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(idUsuario.toString());
+
+                if (jwtService.validateToken(token,
+                        ((com.fesc.tiendaOnline.security.UserDetailsImpl) userDetails).getUsuario())) {
+
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (JwtException | IllegalArgumentException e) {
+            SecurityContextHolder.clearContext();
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
         
         filterChain.doFilter(request, response);

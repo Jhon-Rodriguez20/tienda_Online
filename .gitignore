@@ -146,6 +146,8 @@ secrets.properties
 config/application-secret.yml
 .env
 .secrets
+private_key.pem
+public_key.pem
 
 # Gradle
 .gradle/

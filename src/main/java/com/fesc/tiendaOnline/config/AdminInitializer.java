@@ -49,7 +49,7 @@ public class AdminInitializer implements CommandLineRunner {
             admin.setUsuarioRol(rolAdmin);
             admin.setIntentosEnvioCodigoVerificacion(0);
             admin.setBloqueadoHasta(null);
-            admin.setUrlImagen("sin imagen perfil");
+            admin.setUrlImagen("/images/sinImagenPerfil.webp");
             
             usuarioRepository.save(admin);
         }
