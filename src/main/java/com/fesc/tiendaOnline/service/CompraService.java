@@ -25,7 +25,6 @@ import com.fesc.tiendaOnline.model.entity.CompraEstado;
 import com.fesc.tiendaOnline.model.entity.MetodoPagoCompraEntity;
 import com.fesc.tiendaOnline.model.entity.ProductoEntity;
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
-import com.fesc.tiendaOnline.model.entity.UsuarioRolEntity;
 import com.fesc.tiendaOnline.repository.CompraDetalleRepository;
 import com.fesc.tiendaOnline.repository.CompraRepository;
 import com.fesc.tiendaOnline.repository.MetodoPagoRepository;

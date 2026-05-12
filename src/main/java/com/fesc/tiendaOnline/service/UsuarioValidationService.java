@@ -7,7 +7,6 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import com.fesc.tiendaOnline.exception.ConflictException;
-import com.fesc.tiendaOnline.exception.ForbiddenException;
 import com.fesc.tiendaOnline.exception.NotFoundException;
 import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioCreateDTO;
@@ -21,8 +20,6 @@ import com.fesc.tiendaOnline.repository.UsuarioRolRepository;
 
 @Service
 public class UsuarioValidationService {
-
-    private static final String ADMIN_EMAIL = "developjarz@gmail.com";
 
     private final UsuarioRepository usuarioRepository;
     private final UsuarioRolRepository usuarioRolRepository;
