@@ -13,6 +13,9 @@ public interface UsuarioRepository extends JpaRepository<UsuarioEntity, UUID> {
 
     // Buscar usuario por email
     Optional<UsuarioEntity> findByEmail(String email);
+
+    // Buscar usuario por teléfono
+    Optional<UsuarioEntity> findByTelefono(String telefono);
     
     // Buscar usuario con su rol cargado
     @Query("SELECT u FROM UsuarioEntity u JOIN FETCH u.usuarioRol WHERE u.email = :email")

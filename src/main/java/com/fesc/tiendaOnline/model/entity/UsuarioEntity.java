@@ -51,7 +51,7 @@ public class UsuarioEntity {
     @Column(name = "ciudad", length = 50, nullable = false)
     private String ciudad;
 
-    @Column(name = "codigo_postal", length = 17, nullable = true)
+    @Column(name = "codigo_postal", length = 17, nullable = false)
     private String codigoPostal;
 
     @Enumerated(EnumType.STRING)

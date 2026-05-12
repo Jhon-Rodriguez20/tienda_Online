@@ -60,6 +60,7 @@ public class UsuarioService {
     @Transactional
     public UsuarioResponseDTO crearUsuario(UsuarioCreateDTO usuarioCreateDTO) {
         UsuarioRolEntity rol = usuarioValidationService.validarYObtenerRol(usuarioCreateDTO);
+        usuarioValidationService.validarTelefonoDisponible(usuarioCreateDTO.getTelefono());
 
         UsuarioEntity usuario = new UsuarioEntity();
         usuario.setNombre(usuarioCreateDTO.getNombre());

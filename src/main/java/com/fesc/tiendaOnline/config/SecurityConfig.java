@@ -1,7 +1,9 @@
 package com.fesc.tiendaOnline.config;
 
 import java.util.Arrays;
+import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -27,6 +29,9 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsService userDetailsService;
 
+    @Value("${app.cors.allowed-origins:http://localhost:8080}")
+    private List<String> allowedOrigins;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, UserDetailsService userDetailsService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.userDetailsService = userDetailsService;
@@ -38,38 +43,65 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .headers(headers -> headers
+                .frameOptions(frame -> frame.deny())
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000)
+                )
+            )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/login", "/usuario/registro", "/usuario/verificar",
-            "/usuario/reenviar-codigo", "/usuario/recuperar/solicitar",
-            "/usuario/recuperar/verificar", "/usuario/recuperar/cambiar-contrasena",
-            "/usuario/cancelar-cuenta", "/productos", "/productos/**", "/uploads/**",
-            "/images/**", "/compras/**").permitAll()
+                // Auth
+                .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                // Registro y verificación de cuenta
+                .requestMatchers(HttpMethod.POST, "/usuario/registro").permitAll()
+                .requestMatchers(HttpMethod.POST, "/usuario/verificar").permitAll()
+                .requestMatchers(HttpMethod.POST, "/usuario/reenviar-codigo").permitAll()
+                // Recuperación de contraseña
+                .requestMatchers(HttpMethod.POST, "/usuario/recuperar/solicitar").permitAll()
+                .requestMatchers(HttpMethod.POST, "/usuario/recuperar/verificar").permitAll()
+                .requestMatchers(HttpMethod.POST, "/usuario/recuperar/cambiar-contrasena").permitAll()
+                // Productos: lectura pública
+                .requestMatchers(HttpMethod.GET, "/productos", "/productos/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/productos/buscar/avanzado").permitAll()
+                .requestMatchers(HttpMethod.GET, "/productos/buscar", "/productos/buscar/nombre").permitAll()
+                // Archivos estáticos
+                .requestMatchers("/uploads/**", "/images/**").permitAll()
+                // Productos: escritura solo ADMIN
                 .requestMatchers(HttpMethod.POST, "/productos").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/productos/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/productos/**").hasRole("ADMIN")
+                // Compras: rutas admin
                 .requestMatchers(HttpMethod.POST, "/compras/admin/todas").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/compras/admin/{compraId}/estado").hasRole("ADMIN")
+                // Compras: rutas cliente
+                .requestMatchers(HttpMethod.POST, "/compras/realizar").hasRole("CLIENTE")
+                .requestMatchers(HttpMethod.POST, "/compras/mis-compras").hasRole("CLIENTE")
+                .requestMatchers(HttpMethod.DELETE, "/compras/{compraId}/cancelar").hasRole("CLIENTE")
+                // Todo lo demás requiere autenticación
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        
+
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:8080"));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization", "Content-Type", "Accept", "X-Requested-With"
+        ));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-        
+
         return source;
     }
 
@@ -77,7 +109,7 @@ public class SecurityConfig {
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
-        
+
         return authProvider;
     }
 
@@ -85,7 +117,7 @@ public class SecurityConfig {
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
-    
+
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

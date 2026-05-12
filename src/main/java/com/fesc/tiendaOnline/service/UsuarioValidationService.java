@@ -41,6 +41,11 @@ public class UsuarioValidationService {
                 .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
     }
 
+    public UsuarioEntity obtenerUsuarioPorIdRolAdmin(UUID idAdminRol) {
+        return usuarioRepository.findByIdWithRol(idAdminRol)
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+    }
+
     public UsuarioEntity obtenerUsuarioPorEmailConRol(String email) {
         return usuarioRepository.findByEmailWithRol(email)
                 .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
@@ -126,19 +131,21 @@ public class UsuarioValidationService {
         }
     }
 
+    public void validarTelefonoDisponible(String telefono) {
+        if (usuarioRepository.findByTelefono(telefono).isPresent()) {
+            throw new ConflictException("El teléfono ya está registrado");
+        }
+    }
+    
     private void validarEmailDisponible(String email) {
         if (usuarioRepository.findByEmail(email).isPresent()) {
-            throw new ConflictException("El correo electronico ya esta registrado");
+            throw new ConflictException("El correo electronico ya está registrado");
         }
     }
 
     private void validarCreacionAdministrador(String rolNombre, String email) {
         if (!"ADMIN".equals(rolNombre)) {
             return;
-        }
-
-        if (!ADMIN_EMAIL.equals(email)) {
-            throw new ForbiddenException("No tienes permisos para crear un usuario administrador");
         }
 
         boolean yaExisteAdmin = usuarioRepository.findAll().stream()

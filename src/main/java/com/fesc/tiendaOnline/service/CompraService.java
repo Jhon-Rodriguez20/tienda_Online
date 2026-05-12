@@ -25,6 +25,7 @@ import com.fesc.tiendaOnline.model.entity.CompraEstado;
 import com.fesc.tiendaOnline.model.entity.MetodoPagoCompraEntity;
 import com.fesc.tiendaOnline.model.entity.ProductoEntity;
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
+import com.fesc.tiendaOnline.model.entity.UsuarioRolEntity;
 import com.fesc.tiendaOnline.repository.CompraDetalleRepository;
 import com.fesc.tiendaOnline.repository.CompraRepository;
 import com.fesc.tiendaOnline.repository.MetodoPagoRepository;
@@ -40,11 +41,12 @@ public class CompraService {
     private final MetodoPagoRepository metodoPagoRepository;
     private final NumeroCompraGenerator numeroCompraGenerator;
     private final AdminValidationService adminValidationService;
+    private final UsuarioValidationService usuarioValidationService;
     
     public CompraService(CompraRepository compraRepository, CompraDetalleRepository compraDetalleRepository,
             ProductoRepository productoRepository, UsuarioRepository usuarioRepository,
             MetodoPagoRepository metodoPagoRepository, NumeroCompraGenerator numeroCompraGenerator,
-            AdminValidationService adminValidationService) {
+            AdminValidationService adminValidationService, UsuarioValidationService usuarioValidationService) {
         
         this.compraRepository = compraRepository;
         this.productoRepository = productoRepository;
@@ -52,6 +54,7 @@ public class CompraService {
         this.metodoPagoRepository = metodoPagoRepository;
         this.numeroCompraGenerator = numeroCompraGenerator;
         this.adminValidationService = adminValidationService;
+        this.usuarioValidationService = usuarioValidationService;
     }
 
     // CREAR COMPRA - SOLO CLIENTES
@@ -136,9 +139,13 @@ public class CompraService {
     public CompraResponseDTO getCompraById(UUID compraId, UUID usuarioId) {
         CompraEntity compraEntity = compraRepository.findByIdWithDetails(compraId)
             .orElseThrow(() -> new BusinessRuleException("Compra no encontrada"));
+        
+        UsuarioEntity usuario = usuarioValidationService.obtenerUsuarioPorIdRolAdmin(usuarioId);
+        String rolUsuario = usuario.getUsuarioRol().getRolUsuario();
+        boolean esAdmin = "ADMIN".equals(rolUsuario);
 
-        // validar que la compra sea del usuario
-        if (!compraEntity.getUsuario().getIdUsuario().equals(usuarioId)) {
+        // validar que la compra sea del usuario o el administrador intente verla
+        if (!compraEntity.getUsuario().getIdUsuario().equals(usuarioId) && !esAdmin) {
             throw new BusinessRuleException("No tienes permisos para ver esta compra");
         }
 
