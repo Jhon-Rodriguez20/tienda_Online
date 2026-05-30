@@ -3,7 +3,9 @@ package com.fesc.tiendaOnline.controller;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,6 +24,7 @@ import com.fesc.tiendaOnline.model.dto.ActualizarEstadoCompraDTO;
 import com.fesc.tiendaOnline.model.dto.CompraBusquedaDTO;
 import com.fesc.tiendaOnline.model.dto.CompraRequestDTO;
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
+import com.fesc.tiendaOnline.model.dto.IdempotencyResult;
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
 import com.fesc.tiendaOnline.security.UserDetailsImpl;
 import com.fesc.tiendaOnline.service.CompraService;
@@ -31,6 +35,10 @@ import jakarta.validation.Valid;
 @RequestMapping("/compras")
 public class CompraController {
 
+    /** Patrón UUID v4: 8-4-4-4-12 hex, variante RFC 4122, versión 4. */
+    private static final Pattern UUID_V4_PATTERN = Pattern.compile(
+            "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$");
+
     private final CompraService compraService;
 
     public CompraController(CompraService compraService) {
@@ -40,10 +48,35 @@ public class CompraController {
     // ======= CLIENTE =================
 
     @PostMapping("/realizar")
-    public ResponseEntity<CompraResponseDTO> realizarCompra(@Valid @RequestBody CompraRequestDTO requestDTO) {
+    public ResponseEntity<?> realizarCompra(
+            @Valid @RequestBody CompraRequestDTO requestDTO,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        // 1. Validar presencia del header
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El header Idempotency-Key es obligatorio"));
+        }
+
+        // 2. Validar formato UUID v4
+        if (!UUID_V4_PATTERN.matcher(idempotencyKey).matches()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El header Idempotency-Key debe ser un UUID v4 válido"));
+        }
+
         UUID usuarioId = obtenerIdUsuarioAutenticado();
-        CompraResponseDTO compraResponseDTO = compraService.realizarCompra(requestDTO, usuarioId);
-        return new ResponseEntity<>(compraResponseDTO, HttpStatus.CREATED);
+
+        // 3. Llamar al servicio — cuando task 5.1 actualice la firma, retornará
+        //    IdempotencyResult<CompraResponseDTO>; por ahora envolvemos el resultado.
+        IdempotencyResult<CompraResponseDTO> result = compraService.realizarCompra(requestDTO, usuarioId, idempotencyKey);
+
+        // 4. Añadir header de replay si aplica
+        HttpHeaders headers = new HttpHeaders();
+        if (result.replayed()) {
+            headers.add("Idempotency-Replayed", "true");
+        }
+
+        return new ResponseEntity<>(result.data(), headers, HttpStatus.CREATED);
     }
 
     @PostMapping("/mis-compras")
@@ -80,11 +113,36 @@ public class CompraController {
     }
 
     @PutMapping("/admin/{compraId}/estado")
-    public ResponseEntity<CompraResponseDTO> actualizarEstadoCompra(@PathVariable UUID compraId, @Valid
-                                                                    @RequestBody ActualizarEstadoCompraDTO request) {
+    public ResponseEntity<?> actualizarEstadoCompra(
+            @PathVariable UUID compraId,
+            @Valid @RequestBody ActualizarEstadoCompraDTO request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        // 1. Validar presencia del header
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El header Idempotency-Key es obligatorio"));
+        }
+
+        // 2. Validar formato UUID v4
+        if (!UUID_V4_PATTERN.matcher(idempotencyKey).matches()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El header Idempotency-Key debe ser un UUID v4 válido"));
+        }
+
         UUID adminId = obtenerIdUsuarioAutenticado();
-        CompraResponseDTO compraResponseDTO = compraService.putEstadoCompra(compraId, request, adminId);
-        return ResponseEntity.ok(compraResponseDTO);
+
+        // 3. Llamar al servicio — cuando task 5.3 actualice la firma, retornará
+        //    IdempotencyResult<CompraResponseDTO>; por ahora envolvemos el resultado.
+        IdempotencyResult<CompraResponseDTO> result = compraService.putEstadoCompra(compraId, request, adminId, idempotencyKey);
+
+        // 4. Añadir header de replay si aplica
+        HttpHeaders headers = new HttpHeaders();
+        if (result.replayed()) {
+            headers.add("Idempotency-Replayed", "true");
+        }
+
+        return new ResponseEntity<>(result.data(), headers, HttpStatus.OK);
     }
 
     private UUID obtenerIdUsuarioAutenticado() {

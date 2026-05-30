@@ -2,7 +2,9 @@ package com.fesc.tiendaOnline.service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -12,12 +14,14 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fesc.tiendaOnline.model.dto.ActualizarEstadoCompraDTO;
 import com.fesc.tiendaOnline.model.dto.CompraBusquedaDTO;
 import com.fesc.tiendaOnline.model.dto.CompraRequestDTO;
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
+import com.fesc.tiendaOnline.model.dto.IdempotencyResult;
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
 import com.fesc.tiendaOnline.model.entity.CompraDetalleEntity;
 import com.fesc.tiendaOnline.model.entity.CompraEntity;
@@ -41,11 +45,13 @@ public class CompraService {
     private final NumeroCompraGenerator numeroCompraGenerator;
     private final AdminValidationService adminValidationService;
     private final UsuarioValidationService usuarioValidationService;
+    private final IdempotencyStore idempotencyStore;
     
     public CompraService(CompraRepository compraRepository, CompraDetalleRepository compraDetalleRepository,
             ProductoRepository productoRepository, UsuarioRepository usuarioRepository,
             MetodoPagoRepository metodoPagoRepository, NumeroCompraGenerator numeroCompraGenerator,
-            AdminValidationService adminValidationService, UsuarioValidationService usuarioValidationService) {
+            AdminValidationService adminValidationService, UsuarioValidationService usuarioValidationService,
+            IdempotencyStore idempotencyStore) {
         
         this.compraRepository = compraRepository;
         this.productoRepository = productoRepository;
@@ -54,11 +60,19 @@ public class CompraService {
         this.numeroCompraGenerator = numeroCompraGenerator;
         this.adminValidationService = adminValidationService;
         this.usuarioValidationService = usuarioValidationService;
+        this.idempotencyStore = idempotencyStore;
     }
 
     // CREAR COMPRA - SOLO CLIENTES
-    @Transactional
-    public CompraResponseDTO realizarCompra(CompraRequestDTO request, UUID usuarioId) {     
+    // Requirements: 1.2, 1.3, 3.1, 3.2, 3.4, 5.1, 5.2
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    public IdempotencyResult<CompraResponseDTO> realizarCompra(CompraRequestDTO request, UUID usuarioId, String idempotencyKey) {
+        // Idempotency check: retornar respuesta cacheada si la clave ya existe
+        Optional<CompraResponseDTO> cached = idempotencyStore.get(idempotencyKey);
+        if (cached.isPresent()) {
+            return new IdempotencyResult<>(cached.get(), true);
+        }
+
         UsuarioEntity usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new BusinessRuleException("Usuario no encontrado"));
         
@@ -82,9 +96,13 @@ public class CompraService {
         compra.setIdMetodoPago(metodoPago);
         compra.setUsuario(usuario);
         
+        // Acumular productos modificados para saveAll post-loop (Requirement 3.2)
+        Map<UUID, ProductoEntity> modifiedProducts = new LinkedHashMap<>();
+
         // Procesar items y crear detalles
         for (CompraRequestDTO.ItemCompraDTO item : request.getItems()) {
-            ProductoEntity producto = productoRepository.findById(item.getIdProducto())
+            // Bloqueo pesimista para prevenir condiciones de carrera (Requirement 5.1)
+            ProductoEntity producto = productoRepository.findByIdWithLock(item.getIdProducto())
                     .orElseThrow(() -> new BusinessRuleException("Producto no encontrado: " + item.getIdProducto()));
             
             if (producto.getStockProducto() < item.getCantidad()) {
@@ -102,17 +120,29 @@ public class CompraService {
             totalPagado += detalle.getSubtotal();
             
             producto.setStockProducto(producto.getStockProducto() - item.getCantidad());
-            productoRepository.save(producto);
+            modifiedProducts.put(producto.getIdProducto(), producto);
+            // NO se llama productoRepository.save(producto) dentro del loop
         }
+        
+        // Guardar todos los productos modificados en una sola operación (Requirement 3.2)
+        productoRepository.saveAll(modifiedProducts.values());
         
         compra.setTotalPagado(totalPagado);
         
+        // Guardar la compra una sola vez; CascadeType.ALL persiste los detalles (Requirement 3.4)
         CompraEntity compraGuardada = compraRepository.save(compra);
-                
-        return convertirAResponseDTO(compraGuardada);
+        
+        CompraResponseDTO response = convertirAResponseDTO(compraGuardada);
+
+        // Almacenar en el store de idempotencia para futuras solicitudes duplicadas
+        idempotencyStore.put(idempotencyKey, response);
+
+        return new IdempotencyResult<>(response, false);
     }
 
     // OBTENER MIS COMPRAS - CLIENTES
+    // Requirements: 6.1
+    @Transactional(readOnly = true)
     public PaginacionResponseDTO<CompraResponseDTO> getMisCompras(UUID usuarioId, CompraBusquedaDTO busqueda) {
         Pageable pageable = PageRequest.of(busqueda.getPagina(), busqueda.getTamanio());
         Page<CompraEntity> paginaCompras;
@@ -135,6 +165,8 @@ public class CompraService {
     }
 
     // OBTENER DETALLE DE COMPRA POR ID - CLIENTES
+    // Requirements: 6.1
+    @Transactional(readOnly = true)
     public CompraResponseDTO getCompraById(UUID compraId, UUID usuarioId) {
         CompraEntity compraEntity = compraRepository.findByIdWithDetails(compraId)
             .orElseThrow(() -> new BusinessRuleException("Compra no encontrada"));
@@ -152,7 +184,8 @@ public class CompraService {
     }
 
     // CANCELAR COMPRA SI ESTÁ EN PENDIENTE - CLIENTES
-    @Transactional
+    // Requirements: 4.1, 4.2, 5.3
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void cancelarCompra(UUID compraId, UUID usuarioId) {
         CompraEntity compraEntity = compraRepository.findByIdWithDetails(compraId)
             .orElseThrow(() -> new BusinessRuleException("Compra no encontrada"));
@@ -165,18 +198,30 @@ public class CompraService {
             throw new BusinessRuleException("Solo se pueden cancelar las compras en estado PENDIENTE");
         }
 
-        // Restaurar stock de productos
+        // Acumular productos restaurados para saveAll post-loop (Requirement 4.2)
+        Map<UUID, ProductoEntity> restoredProducts = new LinkedHashMap<>();
+
+        // Restaurar stock de productos con bloqueo pesimista (Requirement 5.3)
         for (CompraDetalleEntity detalle : compraEntity.getDetalles()) {
-            ProductoEntity productoEntity = detalle.getProducto();
+            ProductoEntity productoEntity = productoRepository
+                    .findByIdWithLock(detalle.getProducto().getIdProducto())
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "Producto no encontrado: " + detalle.getProducto().getIdProducto()));
             productoEntity.setStockProducto(productoEntity.getStockProducto() + detalle.getCantidad());
-            productoRepository.save(productoEntity);
+            restoredProducts.put(productoEntity.getIdProducto(), productoEntity);
+            // NO se llama productoRepository.save(productoEntity) dentro del loop
         }
+
+        // Guardar todos los productos restaurados en una sola operación (Requirement 4.2)
+        productoRepository.saveAll(restoredProducts.values());
 
         compraEntity.setCompraEstado(CompraEstado.CANCELADO);
         compraRepository.save(compraEntity);
     }
 
     // OBTENER LAS COMPRAS - ADMIN
+    // Requirements: 6.1
+    @Transactional(readOnly = true)
     public PaginacionResponseDTO<CompraResponseDTO> getAllCompras(CompraBusquedaDTO compraBusquedaDTO, UUID adminId) {
         adminValidationService.validarAdmin(adminId);
         Pageable pageable = PageRequest.of(compraBusquedaDTO.getPagina(), compraBusquedaDTO.getTamanio());
@@ -200,8 +245,15 @@ public class CompraService {
     }
 
     // ACTUALIZAR ESTADO DE COMPRA - ADMIN
+    // Requirements: 2.2, 2.3
     @Transactional
-    public CompraResponseDTO putEstadoCompra(UUID compraId, ActualizarEstadoCompraDTO request, UUID adminId) {
+    public IdempotencyResult<CompraResponseDTO> putEstadoCompra(UUID compraId, ActualizarEstadoCompraDTO request, UUID adminId, String idempotencyKey) {
+        // Idempotency check: retornar respuesta cacheada si la clave ya existe
+        Optional<CompraResponseDTO> cached = idempotencyStore.get(idempotencyKey);
+        if (cached.isPresent()) {
+            return new IdempotencyResult<>(cached.get(), true);
+        }
+
         adminValidationService.validarAdmin(adminId);
 
         CompraEntity compraEntity = compraRepository.findByIdWithDetails(compraId)
@@ -209,7 +261,7 @@ public class CompraService {
         
         CompraEstado nuevoEstado;
         try {
-            nuevoEstado =CompraEstado.valueOf(request.getEstado().toUpperCase());
+            nuevoEstado = CompraEstado.valueOf(request.getEstado().toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new BusinessRuleException("Estado no válido.");
         }
@@ -231,7 +283,12 @@ public class CompraService {
         compraEntity.setCompraEstado(nuevoEstado);
         CompraEntity compraActualizada = compraRepository.save(compraEntity);
         
-        return convertirAResponseDTO(compraActualizada);
+        CompraResponseDTO response = convertirAResponseDTO(compraActualizada);
+
+        // Almacenar en el store de idempotencia para futuras solicitudes duplicadas
+        idempotencyStore.put(idempotencyKey, response);
+
+        return new IdempotencyResult<>(response, false);
     }
 
     private CompraResponseDTO convertirAResponseDTO(CompraEntity compra) {

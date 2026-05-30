@@ -6,8 +6,11 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 import com.fesc.tiendaOnline.model.entity.ProductoEntity;
 
@@ -45,6 +48,11 @@ public interface ProductoRepository extends JpaRepository<ProductoEntity, UUID> 
     // BUSCAR PRODUCTO POR ID
     @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario WHERE p.idProducto = :id")
     Optional<ProductoEntity> findByIdWithDetails(@Param("id") UUID id);
+
+    // BLOQUEO PESIMISTA PARA OPERACIONES DE STOCK (PESSIMISTIC_WRITE)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM ProductoEntity p WHERE p.idProducto = :id")
+    Optional<ProductoEntity> findByIdWithLock(@Param("id") UUID id);
 
     // VERIFICAR SI YA EXISTE UN PRODUCTO POR EL NOMBRE
     boolean existsByNombreProducto(String nombreProducto);
