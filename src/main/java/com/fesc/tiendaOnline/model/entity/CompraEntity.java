@@ -53,7 +53,7 @@ public class CompraEntity {
     @JoinColumn(name = "id_usuario", referencedColumnName = "id_usuario", nullable = false)
     private UsuarioEntity usuario;
 
-    @OneToMany(mappedBy = "compra", cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
+    @OneToMany(mappedBy = "compra", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<CompraDetalleEntity> detalles = new ArrayList<>();
     
     public void addDetalle(CompraDetalleEntity detalle) {

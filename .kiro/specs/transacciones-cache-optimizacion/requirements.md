@@ -227,3 +227,33 @@ Este documento describe los requisitos para cuatro mejoras técnicas en la tiend
 
 4. WHERE la dependencia `com.github.ben-manes.caffeine:caffeine` no esté presente en el `pom.xml`, THE `CacheManager` SHALL usar `ConcurrentMapCacheManager` como alternativa de caché en memoria, configurando igualmente las tres regiones (`productos`, `busquedaProductos`, `productoPorId`) pero sin TTL configurable, ya que `ConcurrentMapCacheManager` no soporta expiración automática de entradas.
 
+---
+
+### Requirement 13: Rate Limiting en endpoints HTTP
+
+**User Story:** Como operador del sistema, quiero que cada endpoint de la API tenga un límite máximo de peticiones por cliente y por ventana de tiempo, de modo que un cliente abusivo o un ataque de fuerza bruta no pueda saturar el servidor ni degradar el servicio para el resto de usuarios.
+
+#### Acceptance Criteria
+
+1. THE aplicación SHALL implementar Rate Limiting utilizando la librería `bucket4j` con un `ConcurrentHashMap` en memoria como almacén de cubos (buckets), sin dependencia de Redis ni de ningún almacén externo.
+
+2. WHEN un cliente envía una petición HTTP, THE filtro de Rate Limiting SHALL identificar al cliente mediante su dirección IP extraída del header `X-Forwarded-For` o, en su ausencia, desde `HttpServletRequest.getRemoteAddr()`.
+
+3. THE filtro de Rate Limiting SHALL aplicar los siguientes límites por IP y ventana de tiempo:
+   - Endpoints de autenticación (`/auth/**`): máximo 10 peticiones por minuto.
+   - Endpoints de productos (`/productos/**`): máximo 100 peticiones por minuto.
+   - Endpoints de compras (`/compras/**`): máximo 30 peticiones por minuto.
+   - Endpoints de usuarios (`/usuarios/**`): máximo 20 peticiones por minuto.
+
+4. WHEN un cliente supera el límite de peticiones permitido para un endpoint, THE filtro de Rate Limiting SHALL retornar una respuesta HTTP 429 (Too Many Requests) con un cuerpo JSON que incluya el mensaje de error y el tiempo restante en segundos hasta que el cubo se recargue.
+
+5. WHEN el filtro de Rate Limiting retorna HTTP 429, THE filtro SHALL incluir el header de respuesta `Retry-After` con el número de segundos que el cliente debe esperar antes de reintentar.
+
+6. WHEN un cliente no ha superado el límite, THE filtro de Rate Limiting SHALL incluir en cada respuesta exitosa los headers `X-RateLimit-Remaining` con el número de tokens disponibles en el cubo y `X-RateLimit-Limit` con el límite total configurado para ese endpoint.
+
+7. THE filtro de Rate Limiting SHALL ser implementado como un `javax.servlet.Filter` (o `jakarta.servlet.Filter`) registrado en el `SecurityConfig` antes del `JwtAuthenticationFilter` en la cadena de filtros, para que las peticiones rechazadas por Rate Limiting no lleguen a la capa de autenticación.
+
+8. WHEN la aplicación arranca, THE filtro de Rate Limiting SHALL inicializar los cubos de forma perezosa (lazy): el cubo de un cliente se crea la primera vez que ese cliente realiza una petición, no en el arranque de la aplicación.
+
+9. IF dos peticiones concurrentes del mismo cliente llegan simultáneamente al filtro, THEN THE filtro de Rate Limiting SHALL garantizar que el acceso al cubo sea thread-safe mediante el uso de `ConcurrentHashMap.computeIfAbsent` o un mecanismo equivalente de atomicidad, evitando condiciones de carrera en la creación o actualización del cubo.
+

@@ -66,8 +66,7 @@ public class CompraController {
 
         UUID usuarioId = obtenerIdUsuarioAutenticado();
 
-        // 3. Llamar al servicio — cuando task 5.1 actualice la firma, retornará
-        //    IdempotencyResult<CompraResponseDTO>; por ahora envolvemos el resultado.
+        // 3. Llamar al servicio
         IdempotencyResult<CompraResponseDTO> result = compraService.realizarCompra(requestDTO, usuarioId, idempotencyKey);
 
         // 4. Añadir header de replay si aplica
@@ -133,7 +132,6 @@ public class CompraController {
         UUID adminId = obtenerIdUsuarioAutenticado();
 
         // 3. Llamar al servicio — cuando task 5.3 actualice la firma, retornará
-        //    IdempotencyResult<CompraResponseDTO>; por ahora envolvemos el resultado.
         IdempotencyResult<CompraResponseDTO> result = compraService.putEstadoCompra(compraId, request, adminId, idempotencyKey);
 
         // 4. Añadir header de replay si aplica

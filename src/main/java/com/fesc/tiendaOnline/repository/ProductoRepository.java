@@ -17,33 +17,49 @@ import com.fesc.tiendaOnline.model.entity.ProductoEntity;
 public interface ProductoRepository extends JpaRepository<ProductoEntity, UUID> {
 
     // OBTENER PRODUCTOS EN PAGINACION
-    @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario")
+    @Query(value = "SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario",
+           countQuery = "SELECT COUNT(p) FROM ProductoEntity p")
     Page<ProductoEntity> findAllWithDetails(Pageable pageable);
 
     // BUSCAR POR NOMBRE DEL PRODUCTO POR COINCIDENCIA PARCIAL - LIKE
-    @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+    @Query(value = "SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+            "WHERE LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :nombre, '%'))",
+           countQuery = "SELECT COUNT(p) FROM ProductoEntity p " +
             "WHERE LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :nombre, '%'))")
     Page<ProductoEntity> buscarPorNombre(@Param("nombre") String nombre, Pageable pageable);
 
     // BUSCAR POR NOMBRE O DESCRIPCIÓN POR COINCIDENCIA PARCIAL
-    @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+    @Query(value = "SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+           "WHERE LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :termino, '%')) " +
+           "OR LOWER(p.descripcionProducto) LIKE LOWER(CONCAT('%', :termino, '%'))",
+           countQuery = "SELECT COUNT(p) FROM ProductoEntity p " +
            "WHERE LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :termino, '%')) " +
            "OR LOWER(p.descripcionProducto) LIKE LOWER(CONCAT('%', :termino, '%'))")
     Page<ProductoEntity> buscarPorTermino(@Param("termino") String termino, Pageable pageable);
 
     // BUSCAR POR NOMBRE CON ORDENACIÓN ESPECÍFICA
-    @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+    @Query(value = "SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
            "WHERE LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :nombre, '%')) " +
-           "ORDER BY p.nombreProducto ASC")
+           "ORDER BY p.nombreProducto ASC",
+           countQuery = "SELECT COUNT(p) FROM ProductoEntity p " +
+           "WHERE LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :nombre, '%'))")
     Page<ProductoEntity> buscarPorNombreOrdenado(@Param("nombre") String nombre, Pageable pageable);
 
     // BUSCAR POR CATEGORIA Y NOMBRE
-    @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+    @Query(value = "SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario " +
+           "WHERE p.categoria.idCategoria = :categoriaId " +
+           "AND LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :nombre, '%'))",
+           countQuery = "SELECT COUNT(p) FROM ProductoEntity p " +
            "WHERE p.categoria.idCategoria = :categoriaId " +
            "AND LOWER(p.nombreProducto) LIKE LOWER(CONCAT('%', :nombre, '%'))")
     Page<ProductoEntity> buscarPorCategoriaYNombre(@Param("categoriaId") UUID categoriaId, 
                                                     @Param("nombre") String nombre, 
                                                     Pageable pageable);
+
+    // BUSCAR POR CATEGORIA (SIN FILTRO DE NOMBRE)
+    @Query(value = "SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario WHERE p.categoria.idCategoria = :categoriaId",
+           countQuery = "SELECT COUNT(p) FROM ProductoEntity p WHERE p.categoria.idCategoria = :categoriaId")
+    Page<ProductoEntity> buscarPorCategoria(@Param("categoriaId") UUID categoriaId, Pageable pageable);
 
     // BUSCAR PRODUCTO POR ID
     @Query("SELECT p FROM ProductoEntity p JOIN FETCH p.categoria JOIN FETCH p.usuario WHERE p.idProducto = :id")

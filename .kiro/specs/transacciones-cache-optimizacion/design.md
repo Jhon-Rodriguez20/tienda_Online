@@ -6,14 +6,15 @@
 
 ## Overview
 
-Este documento describe el diseño técnico para cuatro mejoras ortogonales sobre la tienda online Spring Boot 4 / Java 25 / PostgreSQL:
+Este documento describe el diseño técnico para cinco mejoras ortogonales sobre la tienda online Spring Boot 4 / Java 25 / PostgreSQL:
 
 1. **Idempotencia** en `POST /compras/realizar` y `PUT /compras/admin/{compraId}/estado` mediante el header HTTP `Idempotency-Key`.
 2. **Refuerzo ACID** en `CompraService` y `ProductoService`: nivel de aislamiento `REPEATABLE_READ`, bloqueo pesimista, `saveAll` en lugar de `save` dentro de loops, y `@Transactional(readOnly = true)` en métodos de consulta.
 3. **Caché en memoria con Caffeine** para las tres regiones de consulta de productos: `productos`, `busquedaProductos` y `productoPorId`.
 4. **Corrección N+1** en entidades JPA (`FetchType.LAZY`), repositorios (`countQuery` en queries paginadas) y servicio (`buscarProductosAvanzado` con filtro en BD en lugar de en memoria).
+5. **Rate Limiting** en endpoints HTTP mediante la librería `bucket4j` con almacenamiento en memoria (`ConcurrentHashMap`), aplicando límites por IP y endpoint antes de la capa de autenticación.
 
-Las cuatro mejoras son independientes entre sí y pueden desplegarse juntas sin conflictos. Ninguna requiere cambios de esquema de base de datos.
+Las cinco mejoras son independientes entre sí y pueden desplegarse juntas sin conflictos. Ninguna requiere cambios de esquema de base de datos.
 
 ---
 
@@ -21,9 +22,16 @@ Las cuatro mejoras son independientes entre sí y pueden desplegarse juntas sin 
 
 ```mermaid
 graph TD
+    subgraph Filter Layer
+        RLF[RateLimitingFilter]
+        JAF[JwtAuthenticationFilter]
+    end
+
     subgraph HTTP Layer
         CC[CompraController]
         PC[ProductoController]
+        AC[AuthController]
+        UC[UsuarioController]
     end
 
     subgraph Service Layer
@@ -47,6 +55,13 @@ graph TD
     subgraph DB
         PG[(PostgreSQL)]
     end
+
+    RLF -->|HTTP 429 if exceeded| Client
+    RLF -->|dentro del límite| JAF
+    JAF --> CC
+    JAF --> PC
+    JAF --> AC
+    JAF --> UC
 
     CC -->|Idempotency-Key header| CS
     CS -->|check / store| IS
@@ -88,6 +103,31 @@ sequenceDiagram
         CS->>IS: put(key, responseDTO)
         CS-->>CC: CompraResponseDTO
         CC-->>Client: 201
+    end
+```
+
+**Flujo de Rate Limiting:**
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant RLF as RateLimitingFilter
+    participant BStore as BucketStore (ConcurrentHashMap)
+    participant JAF as JwtAuthenticationFilter
+    participant Controller
+
+    Client->>RLF: HTTP Request
+    RLF->>RLF: Extraer IP (X-Forwarded-For o RemoteAddr)
+    RLF->>RLF: Determinar límite por endpoint
+    RLF->>BStore: computeIfAbsent(clientIP + endpoint)
+    BStore-->>RLF: Bucket (lazy init)
+    RLF->>RLF: bucket.tryConsume(1)
+    alt tokens disponibles
+        RLF->>JAF: Continuar cadena
+        JAF->>Controller: Procesar solicitud
+        Controller-->>Client: 200/201 + X-RateLimit-Remaining + X-RateLimit-Limit
+    else tokens agotados
+        RLF-->>Client: 429 Too Many Requests + Retry-After
     end
 ```
 
@@ -312,9 +352,14 @@ Agregar dos dependencias:
     <artifactId>caffeine</artifactId>
     <version>3.1.8</version>
 </dependency>
+<dependency>
+    <groupId>com.bucket4j</groupId>
+    <artifactId>bucket4j-core</artifactId>
+    <version>8.10.1</version>
+</dependency>
 ```
 
-> **Decisión de versión**: Se usa Caffeine 3.1.8 (la versión más reciente estable compatible con Java 11+). La versión 2.9.3 mencionada en el contexto es la rama 2.x (Java 8); dado que el proyecto usa Java 25, se prefiere la rama 3.x que aprovecha las APIs modernas de Java.
+> **Decisión de versión**: Se usa Caffeine 3.1.8 (la versión más reciente estable compatible con Java 11+). La versión 2.9.3 mencionada en el contexto es la rama 2.x (Java 8); dado que el proyecto usa Java 25, se prefiere la rama 3.x que aprovecha las APIs modernas de Java. Para bucket4j se usa la versión 8.10.1 (última versión estable compatible con Java 17+).
 
 ### 12. `application.properties` (modificado)
 
@@ -334,7 +379,175 @@ cache.producto-por-id.max-size=500
 # IdempotencyStore
 idempotency.ttl-hours=24
 idempotency.max-size=10000
+
+# Rate Limiting
+rate-limit.auth.requests=10
+rate-limit.auth.duration-minutes=1
+rate-limit.productos.requests=100
+rate-limit.productos.duration-minutes=1
+rate-limit.compras.requests=30
+rate-limit.compras.duration-minutes=1
+rate-limit.usuarios.requests=20
+rate-limit.usuarios.duration-minutes=1
 ```
+
+---
+
+### 13. `RateLimitingFilter.java` (nuevo)
+
+Filtro que implementa Rate Limiting con `bucket4j` y se registra antes del `JwtAuthenticationFilter` en la cadena de seguridad.
+
+```java
+@Component
+public class RateLimitingFilter extends OncePerRequestFilter {
+
+    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+
+    @Value("${rate-limit.auth.requests:10}")
+    private int authRequests;
+
+    @Value("${rate-limit.auth.duration-minutes:1}")
+    private int authDuration;
+
+    @Value("${rate-limit.productos.requests:100}")
+    private int productosRequests;
+
+    @Value("${rate-limit.productos.duration-minutes:1}")
+    private int productosDuration;
+
+    @Value("${rate-limit.compras.requests:30}")
+    private int comprasRequests;
+
+    @Value("${rate-limit.compras.duration-minutes:1}")
+    private int comprasDuration;
+
+    @Value("${rate-limit.usuarios.requests:20}")
+    private int usuariosRequests;
+
+    @Value("${rate-limit.usuarios.duration-minutes:1}")
+    private int usuariosDuration;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                     HttpServletResponse response,
+                                     FilterChain filterChain) throws ServletException, IOException {
+        String clientIp = extractClientIp(request);
+        String endpoint = determineEndpoint(request.getRequestURI());
+        String bucketKey = clientIp + ":" + endpoint;
+
+        Bucket bucket = buckets.computeIfAbsent(bucketKey, k -> createBucket(endpoint));
+        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+
+        if (probe.isConsumed()) {
+            response.addHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
+            response.addHeader("X-RateLimit-Limit", String.valueOf(getLimitForEndpoint(endpoint)));
+            filterChain.doFilter(request, response);
+        } else {
+            long waitForRefill = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.addHeader("Retry-After", String.valueOf(waitForRefill));
+            response.getWriter().write(String.format(
+                "{\"error\": \"Too many requests\", \"retryAfterSeconds\": %d}", waitForRefill
+            ));
+        }
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    private String determineEndpoint(String uri) {
+        if (uri.startsWith("/auth/")) return "auth";
+        if (uri.startsWith("/productos/")) return "productos";
+        if (uri.startsWith("/compras/")) return "compras";
+        if (uri.startsWith("/usuarios/")) return "usuarios";
+        return "default";
+    }
+
+    private Bucket createBucket(String endpoint) {
+        Bandwidth limit;
+        switch (endpoint) {
+            case "auth" -> limit = Bandwidth.simple(authRequests, Duration.ofMinutes(authDuration));
+            case "productos" -> limit = Bandwidth.simple(productosRequests, Duration.ofMinutes(productosDuration));
+            case "compras" -> limit = Bandwidth.simple(comprasRequests, Duration.ofMinutes(comprasDuration));
+            case "usuarios" -> limit = Bandwidth.simple(usuariosRequests, Duration.ofMinutes(usuariosDuration));
+            default -> limit = Bandwidth.simple(100, Duration.ofMinutes(1)); // fallback
+        }
+        return Bucket.builder().addLimit(limit).build();
+    }
+
+    private int getLimitForEndpoint(String endpoint) {
+        return switch (endpoint) {
+            case "auth" -> authRequests;
+            case "productos" -> productosRequests;
+            case "compras" -> comprasRequests;
+            case "usuarios" -> usuariosRequests;
+            default -> 100;
+        };
+    }
+}
+```
+
+> **Decisión de diseño**: El filtro extiende `OncePerRequestFilter` para garantizar que se ejecute exactamente una vez por petición, incluso en casos de forward/include internos. La clave del bucket combina IP + endpoint para aislar límites entre rutas. Se usa `computeIfAbsent` para garantizar inicialización lazy thread-safe del bucket.
+
+---
+
+### 14. `SecurityConfig.java` (modificado)
+
+Registrar el `RateLimitingFilter` antes del `JwtAuthenticationFilter` en la cadena de filtros:
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
+
+    // Constructor con ambos filtros
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            // ... configuración existente ...
+            .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+}
+```
+
+> **Decisión de diseño**: El `RateLimitingFilter` se coloca antes del `JwtAuthenticationFilter` para que las peticiones que excedan el límite sean rechazadas antes de validar el JWT, ahorrando procesamiento y previniendo ataques de fuerza bruta sobre la autenticación.
+
+---
+
+### 15. `pom.xml` (modificado)
+
+Agregar dependencia de `bucket4j`:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-cache</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.github.ben-manes.caffeine</groupId>
+    <artifactId>caffeine</artifactId>
+    <version>3.1.8</version>
+</dependency>
+<dependency>
+    <groupId>com.bucket4j</groupId>
+    <artifactId>bucket4j-core</artifactId>
+    <version>8.10.1</version>
+</dependency>
+```
+
+> **Decisión de versión**: Se usa bucket4j 8.10.1 (última versión estable compatible con Java 17+). La API de bucket4j 8.x es más moderna y soporta los patrones builder y `tryConsumeAndReturnRemaining` necesarios para implementar los headers de respuesta.
 
 ---
 
@@ -348,6 +561,23 @@ ConcurrentHashMap (gestionado por Caffeine):
   value : CompraResponseDTO
   TTL   : 24 horas (expireAfterWrite)
   max   : 10 000 entradas
+```
+
+### RateLimitingFilter — estructura de almacenamiento de buckets
+
+```
+ConcurrentHashMap (gestionado por bucket4j):
+  key   : String  (formato: "{clientIP}:{endpoint}")
+  value : Bucket (bucket4j)
+  
+Configuración por endpoint:
+  - /auth/**      : 10 req/min   (Bandwidth.simple(10, Duration.ofMinutes(1)))
+  - /productos/** : 100 req/min  (Bandwidth.simple(100, Duration.ofMinutes(1)))
+  - /compras/**   : 30 req/min   (Bandwidth.simple(30, Duration.ofMinutes(1)))
+  - /usuarios/**  : 20 req/min   (Bandwidth.simple(20, Duration.ofMinutes(1)))
+
+Inicialización: lazy (buckets creados con computeIfAbsent en la primera petición del cliente)
+Thread-safety: garantizada por ConcurrentHashMap.computeIfAbsent
 ```
 
 ### Caffeine Cache Specs por región
@@ -496,6 +726,54 @@ public record IdempotencyResult<T>(T data, boolean replayed) {}
 
 ---
 
+### Property 15: Extracción correcta de IP del cliente
+
+*Para cualquier* petición HTTP, el filtro de Rate Limiting debe identificar correctamente al cliente: si el header `X-Forwarded-For` está presente, debe extraer la primera IP de la lista; si está ausente, debe usar `RemoteAddr`.
+
+**Validates: Requirements 13.2**
+
+---
+
+### Property 16: HTTP 429 cuando se supera el límite de rate limiting
+
+*Para cualquier* endpoint y su límite configurado `L`, cuando un cliente envía `L + N` peticiones (donde `N > 0`) dentro de la ventana de tiempo, todas las peticiones después de la `L`-ésima deben recibir una respuesta HTTP 429 con un cuerpo JSON que incluya el mensaje de error y el tiempo restante en segundos.
+
+**Validates: Requirements 13.4**
+
+---
+
+### Property 17: Header Retry-After en respuestas HTTP 429
+
+*Para cualquier* endpoint, cuando un cliente supera el límite de peticiones y recibe HTTP 429, la respuesta debe incluir el header `Retry-After` con un valor numérico válido (número de segundos que el cliente debe esperar antes de reintentar).
+
+**Validates: Requirements 13.5**
+
+---
+
+### Property 18: Headers informativos en respuestas exitosas de rate limiting
+
+*Para cualquier* petición HTTP que no supera el límite de rate limiting, la respuesta debe incluir los headers `X-RateLimit-Remaining` (con el número de tokens disponibles) y `X-RateLimit-Limit` (con el límite total configurado para ese endpoint).
+
+**Validates: Requirements 13.6**
+
+---
+
+### Property 19: Inicialización perezosa de buckets de rate limiting
+
+*Para cualquier* cliente nuevo (IP nunca vista por el filtro), el bucket correspondiente no debe existir antes de la primera petición de ese cliente, y debe existir después de procesar la primera petición.
+
+**Validates: Requirements 13.8**
+
+---
+
+### Property 20: Thread-safety en creación y consumo de buckets
+
+*Para cualquier* cliente (IP), cuando se envían `N` peticiones concurrentes simultáneas al mismo endpoint, el filtro debe garantizar que: (1) exactamente `N` tokens se consumen del bucket, (2) solo existe un bucket en el `ConcurrentHashMap` para esa clave `{IP:endpoint}`, y (3) no ocurren condiciones de carrera en la creación o actualización del bucket.
+
+**Validates: Requirements 13.9**
+
+---
+
 ## Error Handling
 
 ### Validación de Idempotency-Key en el controlador
@@ -520,6 +798,18 @@ Si Caffeine no está en el classpath, Spring Boot usa `ConcurrentMapCacheManager
 ### IdempotencyStore — comportamiento ante concurrencia
 
 Caffeine garantiza que `put` es atómico. Si dos hilos llaman `put(k, r1)` y `put(k, r2)` simultáneamente para la misma clave nueva, uno de los dos ganará. La semántica de "primera escritura gana" se implementa usando `Cache.get(key, loader)` con un loader que ejecuta la lógica de negocio, garantizando que el loader se ejecuta como máximo una vez por clave.
+
+### Rate Limiting — manejo de errores y casos borde
+
+| Escenario | Comportamiento |
+|---|---|
+| Header `X-Forwarded-For` con múltiples IPs (formato: `IP1, IP2, IP3`) | Se extrae la primera IP (`IP1`) usando `split(",")[0].trim()` |
+| Header `X-Forwarded-For` ausente o vacío | Se usa `HttpServletRequest.getRemoteAddr()` como fallback |
+| URI no coincide con ningún patrón conocido (`/auth/**`, `/productos/**`, `/compras/**`, `/usuarios/**`) | Se aplica límite por defecto de 100 req/min (endpoint `"default"`) |
+| Petición rechazada por Rate Limiting (HTTP 429) | El filtro retorna inmediatamente sin continuar la cadena de filtros, ahorrando procesamiento de JWT y lógica de negocio |
+| Bucket no puede calcular `nanosToWaitForRefill` (bucket vacío hace mucho tiempo) | bucket4j retorna 0 nanosegundos; el header `Retry-After` será `0`, indicando que el cliente puede reintentar inmediatamente después de que pase el próximo segundo |
+
+> **Decisión de diseño**: No se implementa un límite global por IP (solo límites por endpoint). Si un cliente necesita ser bloqueado completamente, se debe agregar un mecanismo de blacklist en el filtro o usar un WAF/API Gateway externo.
 
 ---
 
@@ -566,6 +856,12 @@ Cada propiedad del diseño se implementa como un test `@Property` en jqwik:
 | Property 12 | `ProductoServiceCachePropertyTest` | Evicción selectiva por ID |
 | Property 13 | `ProductoRepositoryPropertyTest` | Filtro por categoría correcto |
 | Property 14 | `CompraRepositoryPropertyTest` | Una sola query SQL al cargar compra |
+| Property 15 | `RateLimitingFilterPropertyTest` | Extracción correcta de IP del cliente |
+| Property 16 | `RateLimitingFilterPropertyTest` | HTTP 429 cuando se supera el límite |
+| Property 17 | `RateLimitingFilterPropertyTest` | Header `Retry-After` en respuestas HTTP 429 |
+| Property 18 | `RateLimitingFilterPropertyTest` | Headers informativos en respuestas exitosas |
+| Property 19 | `RateLimitingFilterPropertyTest` | Inicialización perezosa de buckets |
+| Property 20 | `RateLimitingFilterPropertyTest` | Thread-safety en creación y consumo de buckets |
 
 **Tag format**: Cada test incluye un comentario de referencia:
 ```java
@@ -578,11 +874,24 @@ Cada propiedad del diseño se implementa como un test `@Property` en jqwik:
 - `CompraServiceTest`: `realizarCompra` con stock suficiente → compra creada; `cancelarCompra` en estado PENDIENTE → estado CANCELADO.
 - `ProductoServiceTest`: `crearProducto` → caché eviccionada; `getProductoById` → DTO correcto.
 - `CacheConfigTest`: contexto Spring carga los tres beans de caché con TTL y tamaño correctos.
+- `RateLimitingFilterTest`: 
+  - Endpoint `/auth/login` con 10 peticiones → última exitosa, petición 11 → HTTP 429
+  - Endpoint `/productos/listar` con 100 peticiones → última exitosa, petición 101 → HTTP 429
+  - Endpoint `/compras/realizar` con 30 peticiones → última exitosa, petición 31 → HTTP 429
+  - Endpoint `/usuarios/perfil` con 20 peticiones → última exitosa, petición 21 → HTTP 429
+  - Petición con `X-Forwarded-For: 192.168.1.1, 10.0.0.1` → extrae `192.168.1.1`
+  - Petición sin `X-Forwarded-For` → usa `RemoteAddr`
+  - Respuesta HTTP 429 incluye header `Retry-After` y cuerpo JSON con `retryAfterSeconds`
+  - Respuestas exitosas incluyen headers `X-RateLimit-Remaining` y `X-RateLimit-Limit`
 
 ### Tests de integración
 
 - `CompraServiceIntegrationTest`: dos hilos concurrentes comprando el mismo producto con stock = 1 → solo una compra exitosa, stock final = 0.
 - `ProductoRepositoryIntegrationTest`: `buscarPorCategoria` con datos reales → todos los resultados pertenecen a la categoría solicitada.
+- `RateLimitingFilterIntegrationTest`:
+  - Dos clientes con IPs diferentes accediendo al mismo endpoint → cada cliente tiene su propio límite independiente
+  - Un cliente agotando el límite en un endpoint → puede seguir accediendo a otros endpoints sin restricción
+  - Cliente esperando el tiempo indicado en `Retry-After` → puede volver a hacer peticiones exitosamente
 
 ### Cobertura de smoke tests
 
@@ -593,3 +902,5 @@ Los siguientes aspectos se verifican mediante tests de contexto Spring (`@Spring
 - `@Transactional(readOnly=true)` en los tres métodos de `CompraService`.
 - `FetchType.LAZY` en `CompraEntity.detalles`, `CompraDetalleEntity.compra` y `CompraDetalleEntity.producto`.
 - `countQuery` presente en las queries paginadas de `CompraRepository` y `ProductoRepository`.
+- `RateLimitingFilter` bean presente y registrado en la cadena de filtros antes de `JwtAuthenticationFilter`.
+- `RateLimitingFilter` usa `bucket4j` y `ConcurrentHashMap` como almacén de buckets.

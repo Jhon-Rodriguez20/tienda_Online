@@ -22,15 +22,17 @@ public interface CompraRepository extends JpaRepository<CompraEntity, UUID> {
               "WHERE c.idCompra = :id")
        Optional<CompraEntity> findByIdWithDetails(@Param("id") UUID id);
     
-       @Query("SELECT DISTINCT c FROM CompraEntity c " +
+       @Query(value = "SELECT DISTINCT c FROM CompraEntity c " +
               "LEFT JOIN FETCH c.usuario " +
               "LEFT JOIN FETCH c.idMetodoPago " +
-              "WHERE c.usuario.idUsuario = :usuarioId")
+              "WHERE c.usuario.idUsuario = :usuarioId",
+              countQuery = "SELECT COUNT(DISTINCT c) FROM CompraEntity c WHERE c.usuario.idUsuario = :usuarioId")
        Page<CompraEntity> findByUsuarioId(@Param("usuarioId") UUID usuarioId, Pageable pageable);
        
-       @Query("SELECT DISTINCT c FROM CompraEntity c " +
+       @Query(value = "SELECT DISTINCT c FROM CompraEntity c " +
               "LEFT JOIN FETCH c.usuario " +
-              "LEFT JOIN FETCH c.idMetodoPago")
+              "LEFT JOIN FETCH c.idMetodoPago",
+              countQuery = "SELECT COUNT(DISTINCT c) FROM CompraEntity c")
        Page<CompraEntity> findAllWithDetails(Pageable pageable);
        
        @Query("SELECT DISTINCT c FROM CompraEntity c " +
@@ -46,18 +48,22 @@ public interface CompraRepository extends JpaRepository<CompraEntity, UUID> {
        Optional<CompraEntity> findByUsuarioIdAndNumeroCompra(@Param("usuarioId") UUID usuarioId, 
                                                                @Param("numeroCompra") String numeroCompra);
        
-       @Query("SELECT DISTINCT c FROM CompraEntity c " +
+       @Query(value = "SELECT DISTINCT c FROM CompraEntity c " +
               "LEFT JOIN FETCH c.usuario " +
               "LEFT JOIN FETCH c.idMetodoPago " +
+              "WHERE c.usuario.idUsuario = :usuarioId AND c.fechaCompra BETWEEN :fechaInicio AND :fechaFin",
+              countQuery = "SELECT COUNT(DISTINCT c) FROM CompraEntity c " +
               "WHERE c.usuario.idUsuario = :usuarioId AND c.fechaCompra BETWEEN :fechaInicio AND :fechaFin")
        Page<CompraEntity> findByUsuarioIdAndFechaBetween(@Param("usuarioId") UUID usuarioId,
                                                         @Param("fechaInicio") LocalDateTime fechaInicio,
                                                         @Param("fechaFin") LocalDateTime fechaFin,
                                                         Pageable pageable);
 
-       @Query("SELECT DISTINCT c FROM CompraEntity c " +
+       @Query(value = "SELECT DISTINCT c FROM CompraEntity c " +
               "LEFT JOIN FETCH c.usuario " +
               "LEFT JOIN FETCH c.idMetodoPago " +
+              "WHERE c.fechaCompra BETWEEN :fechaInicio AND :fechaFin",
+              countQuery = "SELECT COUNT(DISTINCT c) FROM CompraEntity c " +
               "WHERE c.fechaCompra BETWEEN :fechaInicio AND :fechaFin")
        Page<CompraEntity> findByFechaBetween(@Param("fechaInicio") LocalDateTime fechaInicio,
                                                  @Param("fechaFin") LocalDateTime fechaFin,

@@ -25,11 +25,11 @@ public class CompraDetalleEntity {
     @Column(name = "id_compra_detalle", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idCompraDetalle;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_compra", referencedColumnName = "id_compra", nullable = false)
     private CompraEntity compra;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_producto", referencedColumnName = "id_producto", nullable = false)
     private ProductoEntity producto;
 

@@ -3,10 +3,8 @@ package com.fesc.tiendaOnline.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,7 +19,10 @@ import com.fesc.tiendaOnline.model.entity.ProductoEntity;
 import com.fesc.tiendaOnline.repository.CategoriaRepository;
 import com.fesc.tiendaOnline.repository.ProductoRepository;
 
-import jakarta.transaction.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProductoService {
@@ -42,6 +43,8 @@ public class ProductoService {
     }
 
     // LISTAR PRODUCTOS CON PAGINACIÓN - DISPONIBLE PARA TODOS LOS USUARIOS
+    @Transactional(readOnly = true)
+    @Cacheable(value = "productos", key = "#pagina + '-' + #tamanio")
     public PaginacionResponseDTO<ProductoResponseDTO> getProductos(int pagina, int tamanio) {
         Pageable pageable = PageRequest.of(pagina, tamanio);
         Page<ProductoEntity> paginaProductos = productoRepository.findAllWithDetails(pageable);
@@ -49,6 +52,8 @@ public class ProductoService {
     }
 
     //BUSCAR PRODUCTOS POR TERMINO (NOMBRE O DESCRIPCION) - DISPONIBLE PARA TODOS LOS USUARIOS
+    @Transactional(readOnly = true)
+    @Cacheable(value = "busquedaProductos", key = "#termino + '-' + #pagina + '-' + #tamanio")
     public PaginacionResponseDTO<ProductoResponseDTO> buscarProductosPorTermino(String termino, int pagina, int tamanio) {
         Pageable pageable = PageRequest.of(pagina, tamanio);
         if (termino == null || termino.trim().isEmpty()) {
@@ -59,6 +64,8 @@ public class ProductoService {
     }
 
     // BUSCAR PRODUCTOS POR NOMBRE EXACTAMENTE - DISPONIBLE PARA TODOS LOS USUARIOS
+    @Transactional(readOnly = true)
+    @Cacheable(value = "busquedaProductos", key = "#nombre + '-' + #pagina + '-' + #tamanio")
     public PaginacionResponseDTO<ProductoResponseDTO> buscarProductosPorNombre(String nombre, int pagina, int tamanio) {
         Pageable pageable = PageRequest.of(pagina, tamanio);
         if (nombre == null || nombre.trim().isEmpty()) {
@@ -69,6 +76,8 @@ public class ProductoService {
     }
 
     // BUSQUEDA AVANZADA CON MULTIPLES FILTROS - DISPONIBLE PARA TODOS LOS USUARIOS
+    @Transactional(readOnly = true)
+    @Cacheable(value = "busquedaProductos", key = "#productoBusquedaDTO.termino + '-' + #productoBusquedaDTO.categoriaId + '-' + #productoBusquedaDTO.pagina + '-' + #productoBusquedaDTO.tamanio")
     public PaginacionResponseDTO<ProductoResponseDTO> buscarProductosAvanzado(ProductoBusquedaDTO productoBusquedaDTO) {
         Pageable pageable = PageRequest.of(productoBusquedaDTO.getPagina(), productoBusquedaDTO.getTamanio());
         Page<ProductoEntity> paginaProductos;
@@ -89,14 +98,7 @@ public class ProductoService {
             paginaProductos = productoRepository.buscarPorTermino(terminoOpt.get(), pageable);
 
         } else if (categoriaIdOpt.isPresent()) {
-            paginaProductos = productoRepository.findAllWithDetails(pageable);
-            List<ProductoEntity> filtrados = paginaProductos.getContent().stream()
-                .filter(p -> p.getCategoria().getIdCategoria().equals(categoriaIdOpt.get()))
-                .collect(Collectors.toList());
-
-            paginaProductos = new PageImpl<>(
-                filtrados, pageable, paginaProductos.getTotalElements()
-            );
+            paginaProductos = productoRepository.buscarPorCategoria(categoriaIdOpt.get(), pageable);
 
         } else {
             paginaProductos = productoRepository.findAllWithDetails(pageable);
@@ -106,6 +108,8 @@ public class ProductoService {
 
 
     // OBTENER PRODUCTO POR ID - DISPONIBLE PARA TODOS LOS USUARIOS
+    @Transactional(readOnly = true)
+    @Cacheable(value = "productoPorId", key = "#idProducto")
     public ProductoResponseDTO getProductoById(UUID idProducto) {
         ProductoEntity producto = productoRepository.findByIdWithDetails(idProducto)
                 .orElseThrow(() -> new BusinessRuleException("Producto no encontrado por este ID."));
@@ -113,6 +117,7 @@ public class ProductoService {
     }
 
     // CREAR PRODUCTO - SOLO ADMINISTRADORES
+    @CacheEvict(value = {"productos", "busquedaProductos"}, allEntries = true)
     @Transactional
     public ProductoResponseDTO crearProducto(ProductoCreateDTO productoCreateDTO, UUID idAdmin) {
         adminValidationService.validarAdmin(idAdmin);
@@ -144,6 +149,10 @@ public class ProductoService {
     }
 
     // ACTUALIZAR PRODUCTO - SOLO ADMINISTRADORES
+    @Caching(evict = {
+        @CacheEvict(value = {"productos", "busquedaProductos"}, allEntries = true),
+        @CacheEvict(value = "productoPorId", key = "#idProducto")
+    })
     @Transactional
     public ProductoResponseDTO actualizarProducto(UUID idProducto, ProductoUpdateDTO productoUpdateDTO, UUID idAdmin) {
         adminValidationService.validarAdmin(idAdmin);
@@ -164,6 +173,10 @@ public class ProductoService {
     }
 
     // ELIMINAR PRODUCTO - SOLO ADMINISTRADORES
+    @Caching(evict = {
+        @CacheEvict(value = {"productos", "busquedaProductos"}, allEntries = true),
+        @CacheEvict(value = "productoPorId", key = "#idProducto")
+    })
     @Transactional
     public void eliminarProducto(UUID idProducto, UUID idAdmin) {
         adminValidationService.validarAdmin(idAdmin);
