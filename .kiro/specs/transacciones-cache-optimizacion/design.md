@@ -904,3 +904,113 @@ Los siguientes aspectos se verifican mediante tests de contexto Spring (`@Spring
 - `countQuery` presente en las queries paginadas de `CompraRepository` y `ProductoRepository`.
 - `RateLimitingFilter` bean presente y registrado en la cadena de filtros antes de `JwtAuthenticationFilter`.
 - `RateLimitingFilter` usa `bucket4j` y `ConcurrentHashMap` como almacén de buckets.
+
+
+---
+
+## Índices de Base de Datos (PostgreSQL)
+
+Las cinco mejoras principales no requieren cambios de esquema, pero para que las consultas JPQL diseñadas en este documento operen a máxima eficiencia en PostgreSQL se deben crear los siguientes índices. Se agrupan por tabla.
+
+### Tabla `compra`
+
+| Índice | Columna(s) | Tipo | Justificación |
+|---|---|---|---|
+| `idx_compra_id_usuario` | `id_usuario` | B-Tree | Filtra compras por usuario en `findByUsuarioId`, `findByUsuarioIdAndNumeroCompra`, `findByUsuarioIdAndFechaBetween`. FK sin índice explícito en PostgreSQL. |
+| `idx_compra_fecha_compra` | `fecha_compra` | B-Tree | Filtra y ordena por fecha en `findByFechaBetween` y `findByUsuarioIdAndFechaBetween`. |
+| `idx_compra_estado` | `compra_estado` | B-Tree | Filtra por estado de compra en consultas de administración. |
+
+```sql
+CREATE INDEX idx_compra_id_usuario   ON compra(id_usuario);
+CREATE INDEX idx_compra_fecha_compra ON compra(fecha_compra);
+CREATE INDEX idx_compra_estado       ON compra(compra_estado);
+```
+
+### Tabla `compra_detalle`
+
+| Índice | Columna(s) | Tipo | Justificación |
+|---|---|---|---|
+| `idx_compra_detalle_id_compra` | `id_compra` | B-Tree | Carga de la relación `@OneToMany detalles` (JOIN FETCH en `findByIdWithDetails`). |
+| `idx_compra_detalle_id_producto` | `id_producto` | B-Tree | Navegación `@ManyToOne producto` desde detalle y bloqueo pesimista de stock. |
+
+```sql
+CREATE INDEX idx_compra_detalle_id_compra   ON compra_detalle(id_compra);
+CREATE INDEX idx_compra_detalle_id_producto ON compra_detalle(id_producto);
+```
+
+### Tabla `producto`
+
+| Índice | Columna(s) | Tipo | Justificación |
+|---|---|---|---|
+| `idx_producto_categoria` | `id_producto_categoria` | B-Tree | Filtra productos por categoría en `buscarPorCategoria` y `buscarPorCategoriaYNombre`. FK sin índice automático. |
+| `idx_producto_nombre_trgm` | `LOWER(nombre_producto)` | GIN (pg_trgm) | Búsqueda `LIKE '%termino%'` case-insensitive en `buscarPorNombre`, `buscarPorTermino`, `buscarPorNombreOrdenado`. |
+| `idx_producto_descripcion_trgm` | `LOWER(descripcion_producto)` | GIN (pg_trgm) | Búsqueda `LIKE '%termino%'` case-insensitive en la descripción para `buscarPorTermino`. |
+
+```sql
+-- Extensión requerida para índices trigram (instalar una sola vez por base de datos)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX idx_producto_categoria
+    ON producto(id_producto_categoria);
+
+CREATE INDEX idx_producto_nombre_trgm
+    ON producto USING GIN (LOWER(nombre_producto) gin_trgm_ops);
+
+CREATE INDEX idx_producto_descripcion_trgm
+    ON producto USING GIN (LOWER(descripcion_producto) gin_trgm_ops);
+```
+
+> **Nota sobre `nombre_producto`**: La columna ya tiene `unique = true`, lo que crea automáticamente un índice B-Tree en PostgreSQL. Ese índice sirve para búsquedas por igualdad exacta, pero no para búsquedas `LIKE '%...%'`. El índice GIN trigram es complementario, no redundante.
+
+### Tabla `usuario`
+
+| Índice | Columna(s) | Tipo | Justificación |
+|---|---|---|---|
+| *(automático)* | `email` | B-Tree único | Generado por la constraint `UNIQUE`. Sirve `findByEmail` y `findByEmailWithRol`. No requiere DDL adicional. |
+| *(automático)* | `telefono` | B-Tree único | Generado por la constraint `UNIQUE`. Sirve `findByTelefono`. No requiere DDL adicional. |
+
+### Tabla `usuario_codigo_verificacion`
+
+| Índice | Columna(s) | Tipo | Justificación |
+|---|---|---|---|
+| `idx_codigo_verificacion_id_usuario` | `id_usuario` | B-Tree | Sirve `findByUsuario`, `deleteByIdUsuario` y `deleteByUsuarioEntity`. FK sin índice automático. |
+
+```sql
+CREATE INDEX idx_codigo_verificacion_id_usuario
+    ON usuario_codigo_verificacion(id_usuario);
+```
+
+### Script de migración completo
+
+Si el proyecto usa **Flyway**, crear el archivo `src/main/resources/db/migration/V2__add_indexes.sql`:
+
+```sql
+-- V2__add_indexes.sql
+-- Índices de rendimiento para tiendaOnline
+
+-- Extensión trigrama (solo si no está instalada)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Tabla: compra
+CREATE INDEX IF NOT EXISTS idx_compra_id_usuario   ON compra(id_usuario);
+CREATE INDEX IF NOT EXISTS idx_compra_fecha_compra ON compra(fecha_compra);
+CREATE INDEX IF NOT EXISTS idx_compra_estado       ON compra(compra_estado);
+
+-- Tabla: compra_detalle
+CREATE INDEX IF NOT EXISTS idx_compra_detalle_id_compra   ON compra_detalle(id_compra);
+CREATE INDEX IF NOT EXISTS idx_compra_detalle_id_producto ON compra_detalle(id_producto);
+
+-- Tabla: producto
+CREATE INDEX IF NOT EXISTS idx_producto_categoria
+    ON producto(id_producto_categoria);
+CREATE INDEX IF NOT EXISTS idx_producto_nombre_trgm
+    ON producto USING GIN (LOWER(nombre_producto) gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_producto_descripcion_trgm
+    ON producto USING GIN (LOWER(descripcion_producto) gin_trgm_ops);
+
+-- Tabla: usuario_codigo_verificacion
+CREATE INDEX IF NOT EXISTS idx_codigo_verificacion_id_usuario
+    ON usuario_codigo_verificacion(id_usuario);
+```
+
+> **Decisión de diseño**: Se usa `CREATE INDEX IF NOT EXISTS` para que el script sea idempotente y pueda ejecutarse en entornos donde algunos índices ya existan (por ejemplo, si la BD se creó con la versión anterior del esquema). Si no se usa Flyway, este script puede ejecutarse manualmente una sola vez por entorno.

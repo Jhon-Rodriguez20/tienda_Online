@@ -257,3 +257,65 @@ Este documento describe los requisitos para cuatro mejoras técnicas en la tiend
 
 9. IF dos peticiones concurrentes del mismo cliente llegan simultáneamente al filtro, THEN THE filtro de Rate Limiting SHALL garantizar que el acceso al cubo sea thread-safe mediante el uso de `ConcurrentHashMap.computeIfAbsent` o un mecanismo equivalente de atomicidad, evitando condiciones de carrera en la creación o actualización del cubo.
 
+
+---
+
+### Requirement 14: Índices de base de datos en PostgreSQL
+
+**User Story:** Como desarrollador, quiero que las tablas de PostgreSQL tengan los índices adecuados para las consultas más frecuentes, de modo que el rendimiento de las búsquedas y filtros no degrade con el crecimiento del volumen de datos.
+
+#### Acceptance Criteria
+
+1. THE tabla `compra` SHALL tener un índice en la columna `id_usuario` para acelerar las consultas que filtran compras por usuario (`findByUsuarioId`, `findByUsuarioIdAndNumeroCompra`, `findByUsuarioIdAndFechaBetween`):
+   ```sql
+   CREATE INDEX idx_compra_id_usuario ON compra(id_usuario);
+   ```
+
+2. THE tabla `compra` SHALL tener un índice en la columna `fecha_compra` para acelerar las consultas que filtran compras por rango de fechas (`findByFechaBetween`, `findByUsuarioIdAndFechaBetween`):
+   ```sql
+   CREATE INDEX idx_compra_fecha_compra ON compra(fecha_compra);
+   ```
+
+3. THE tabla `compra` SHALL tener un índice en la columna `compra_estado` para acelerar las consultas que filtran por estado de compra:
+   ```sql
+   CREATE INDEX idx_compra_estado ON compra(compra_estado);
+   ```
+
+4. THE tabla `compra_detalle` SHALL tener un índice en la columna `id_compra` para acelerar las cargas de los detalles de una compra (`findByIdWithDetails` y la relación `@OneToMany detalles`):
+   ```sql
+   CREATE INDEX idx_compra_detalle_id_compra ON compra_detalle(id_compra);
+   ```
+
+5. THE tabla `compra_detalle` SHALL tener un índice en la columna `id_producto` para acelerar las consultas que navegan desde detalles hacia el producto (relación `@ManyToOne producto`) y las operaciones de bloqueo pesimista sobre el stock:
+   ```sql
+   CREATE INDEX idx_compra_detalle_id_producto ON compra_detalle(id_producto);
+   ```
+
+6. THE tabla `producto` SHALL tener un índice en la columna `id_producto_categoria` para acelerar las consultas que filtran productos por categoría (`buscarPorCategoria`, `buscarPorCategoriaYNombre`):
+   ```sql
+   CREATE INDEX idx_producto_categoria ON producto(id_producto_categoria);
+   ```
+
+7. THE tabla `producto` SHALL tener un índice GIN sobre `LOWER(nombre_producto)` con la extensión `pg_trgm` para acelerar las búsquedas por coincidencia parcial con `LIKE` (`buscarPorNombre`, `buscarPorTermino`, `buscarPorNombreOrdenado`):
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   CREATE INDEX idx_producto_nombre_trgm ON producto USING GIN (LOWER(nombre_producto) gin_trgm_ops);
+   ```
+
+8. THE tabla `producto` SHALL tener un índice GIN sobre `LOWER(descripcion_producto)` con `pg_trgm` para acelerar las búsquedas por término en la descripción (`buscarPorTermino`):
+   ```sql
+   CREATE INDEX idx_producto_descripcion_trgm ON producto USING GIN (LOWER(descripcion_producto) gin_trgm_ops);
+   ```
+
+9. THE tabla `usuario` SHALL tener un índice en la columna `email` (aunque ya existe la constraint `UNIQUE`, se debe confirmar que PostgreSQL genera automáticamente el índice subyacente al declarar `unique = true` en la entidad):
+   ```sql
+   -- Generado automáticamente por la constraint UNIQUE; no requiere CREATE INDEX explícito.
+   -- Confirmar con: \d usuario en psql
+   ```
+
+10. THE tabla `usuario_codigo_verificacion` SHALL tener un índice en la columna `id_usuario` (FK) para acelerar la búsqueda del código de verificación de un usuario (`findByUsuario`, `deleteByIdUsuario`):
+    ```sql
+    CREATE INDEX idx_codigo_verificacion_id_usuario ON usuario_codigo_verificacion(id_usuario);
+    ```
+
+11. WHEN se aplican los índices anteriores, THE aplicación SHALL registrar los scripts DDL de creación de índices en un archivo de migración de base de datos (por ejemplo, `V2__add_indexes.sql` si se usa Flyway, o como script ejecutable en el arranque), de modo que los índices se apliquen de forma reproducible en cualquier entorno.

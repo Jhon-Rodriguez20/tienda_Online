@@ -156,16 +156,16 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - En `eliminarProducto`: agregar `@Caching(evict = { @CacheEvict(value = {"productos", "busquedaProductos"}, allEntries = true), @CacheEvict(value = "productoPorId", key = "#idProducto") })`
     - _Requirements: 7.5, 8.5, 9.4, 9.5_
 
-- [ ] 12. Implementar infraestructura de Rate Limiting
-  - [ ] 12.1 Agregar dependencia de bucket4j en `pom.xml`
+- [x] 12. Implementar infraestructura de Rate Limiting
+  - [x] 12.1 Agregar dependencia de bucket4j en `pom.xml`
     - Agregar `com.bucket4j:bucket4j-core:8.10.1` en la sección `<dependencies>`
     - _Requirements: 13.1_
 
-  - [ ] 12.2 Agregar propiedades de rate limiting en `application.properties`
+  - [x] 12.2 Agregar propiedades de rate limiting en `application.properties`
     - Agregar las ocho propiedades de rate limiting (`rate-limit.auth.requests`, `rate-limit.auth.duration-minutes`, `rate-limit.productos.requests`, `rate-limit.productos.duration-minutes`, `rate-limit.compras.requests`, `rate-limit.compras.duration-minutes`, `rate-limit.usuarios.requests`, `rate-limit.usuarios.duration-minutes`)
     - _Requirements: 13.3_
 
-  - [ ] 12.3 Crear `RateLimitingFilter.java` con lógica de rate limiting
+  - [x] 12.3 Crear `RateLimitingFilter.java` con lógica de rate limiting
     - Crear clase `@Component` que extiende `OncePerRequestFilter` en el paquete `config`
     - Inyectar los ocho valores de límites por endpoint con `@Value` y valores por defecto
     - Declarar `ConcurrentHashMap<String, Bucket> buckets` como campo de instancia
@@ -178,54 +178,54 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Implementar `getLimitForEndpoint(String endpoint)`: retornar el límite numérico configurado para el endpoint
     - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.8, 13.9_
 
-  - [ ] 12.4 Modificar `SecurityConfig.java` para registrar `RateLimitingFilter` antes de `JwtAuthenticationFilter`
+  - [x] 12.4 Modificar `SecurityConfig.java` para registrar `RateLimitingFilter` antes de `JwtAuthenticationFilter`
     - Inyectar `RateLimitingFilter` en el constructor de `SecurityConfig`
     - En el método `securityFilterChain`, agregar `.addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)` ANTES de la línea que registra `jwtAuthenticationFilter`
     - _Requirements: 13.7_
 
-- [ ] 13. Checkpoint — Verificar rate limiting
+- [x] 13. Checkpoint — Verificar rate limiting
   - Asegurarse de que todos los tests del paso 12 pasan y el proyecto compila sin errores. Verificar que el filtro se aplica correctamente antes de la autenticación y que los límites por endpoint funcionan de forma independiente. Consultar al usuario si surgen dudas.
 
-- [ ]* 14. Tests de propiedades para rate limiting
-  - [ ]* 14.1 Escribir property test para extracción correcta de IP del cliente
+- [x] 14. Tests de propiedades para rate limiting
+  - [x] 14.1 Escribir property test para extracción correcta de IP del cliente
     - **Property 15: Extracción correcta de IP del cliente**
     - **Validates: Requirements 13.2**
     - Crear `RateLimitingFilterPropertyTest.java` en el paquete de test `config`
     - Usar `@Property` con jqwik para generar valores arbitrarios de IPs (con y sin `X-Forwarded-For`)
     - Verificar que cuando `X-Forwarded-For` está presente, se extrae la primera IP; cuando ausente, se usa `RemoteAddr`
 
-  - [ ]* 14.2 Escribir property test para HTTP 429 cuando se supera el límite
+  - [x] 14.2 Escribir property test para HTTP 429 cuando se supera el límite
     - **Property 16: HTTP 429 cuando se supera el límite de rate limiting**
     - **Validates: Requirements 13.4**
     - Usar `@Property` para generar límites arbitrarios `L` y número de peticiones `L + N` (donde `N > 0`)
     - Verificar que todas las peticiones después de la `L`-ésima reciben HTTP 429 con cuerpo JSON correcto
 
-  - [ ]* 14.3 Escribir property test para header Retry-After en respuestas HTTP 429
+  - [x] 14.3 Escribir property test para header Retry-After en respuestas HTTP 429
     - **Property 17: Header Retry-After en respuestas HTTP 429**
     - **Validates: Requirements 13.5**
     - Usar `@Property` para generar escenarios donde el límite se supera
     - Verificar que todas las respuestas HTTP 429 incluyen el header `Retry-After` con un valor numérico válido
 
-  - [ ]* 14.4 Escribir property test para headers informativos en respuestas exitosas
+  - [x] 14.4 Escribir property test para headers informativos en respuestas exitosas
     - **Property 18: Headers informativos en respuestas exitosas de rate limiting**
     - **Validates: Requirements 13.6**
     - Usar `@Property` para generar peticiones que no superan el límite
     - Verificar que las respuestas incluyen `X-RateLimit-Remaining` y `X-RateLimit-Limit` con valores correctos
 
-  - [ ]* 14.5 Escribir property test para inicialización perezosa de buckets
+  - [x] 14.5 Escribir property test para inicialización perezosa de buckets
     - **Property 19: Inicialización perezosa de buckets de rate limiting**
     - **Validates: Requirements 13.8**
     - Usar `@Property` para generar IPs de clientes nuevos
     - Verificar que el bucket no existe antes de la primera petición y existe después
 
-  - [ ]* 14.6 Escribir property test para thread-safety en creación y consumo de buckets
+  - [x] 14.6 Escribir property test para thread-safety en creación y consumo de buckets
     - **Property 20: Thread-safety en creación y consumo de buckets**
     - **Validates: Requirements 13.9**
     - Usar `@Property` para generar `N` peticiones concurrentes del mismo cliente
     - Verificar que exactamente `N` tokens se consumen, solo existe un bucket para la clave, y no hay condiciones de carrera
 
-- [ ] 15. Tests unitarios e integración para rate limiting
-  - [ ] 15.1 Escribir tests unitarios para límites por endpoint
+- [x] 15. Tests unitarios e integración para rate limiting
+  - [x] 15.1 Escribir tests unitarios para límites por endpoint
     - Crear `RateLimitingFilterTest.java` en el paquete de test `config`
     - Test para endpoint `/auth/**`: enviar 10 peticiones exitosas, petición 11 → HTTP 429
     - Test para endpoint `/productos/**`: enviar 100 peticiones exitosas, petición 101 → HTTP 429
@@ -233,19 +233,42 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Test para endpoint `/usuarios/**`: enviar 20 peticiones exitosas, petición 21 → HTTP 429
     - _Requirements: 13.3, 13.4_
 
-  - [ ] 15.2 Escribir tests unitarios para extracción de IP y headers de respuesta
+  - [x] 15.2 Escribir tests unitarios para extracción de IP y headers de respuesta
     - Test para petición con `X-Forwarded-For: 192.168.1.1, 10.0.0.1` → extrae `192.168.1.1`
     - Test para petición sin `X-Forwarded-For` → usa `RemoteAddr`
     - Test para respuesta HTTP 429 → incluye header `Retry-After` y cuerpo JSON con `retryAfterSeconds`
     - Test para respuestas exitosas → incluyen headers `X-RateLimit-Remaining` y `X-RateLimit-Limit`
     - _Requirements: 13.2, 13.5, 13.6_
 
-  - [ ] 15.3 Escribir tests de integración para aislamiento de límites entre clientes y endpoints
+  - [x] 15.3 Escribir tests de integración para aislamiento de límites entre clientes y endpoints
     - Crear `RateLimitingFilterIntegrationTest.java` en el paquete de test `config`
     - Test para dos clientes con IPs diferentes accediendo al mismo endpoint → cada cliente tiene su propio límite independiente
     - Test para un cliente agotando el límite en un endpoint → puede seguir accediendo a otros endpoints sin restricción
     - Test para cliente esperando el tiempo indicado en `Retry-After` → puede volver a hacer peticiones exitosamente
     - _Requirements: 13.3, 13.4, 13.5, 13.7_
+
+- [ ] 16. Crear script de índices de base de datos PostgreSQL
+  - [ ] 16.1 Habilitar la extensión `pg_trgm` y crear todos los índices en un script DDL
+    - Crear el archivo `src/main/resources/db/migration/V2__add_indexes.sql` (o el script equivalente si no se usa Flyway)
+    - Agregar `CREATE EXTENSION IF NOT EXISTS pg_trgm;` al inicio del script
+    - Crear `idx_compra_id_usuario` en `compra(id_usuario)` — optimiza `findByUsuarioId`, `findByUsuarioIdAndNumeroCompra`, `findByUsuarioIdAndFechaBetween`
+    - Crear `idx_compra_fecha_compra` en `compra(fecha_compra)` — optimiza `findByFechaBetween` y `findByUsuarioIdAndFechaBetween`
+    - Crear `idx_compra_estado` en `compra(compra_estado)` — optimiza filtros por estado de compra
+    - Crear `idx_compra_detalle_id_compra` en `compra_detalle(id_compra)` — optimiza la carga de la relación `@OneToMany detalles`
+    - Crear `idx_compra_detalle_id_producto` en `compra_detalle(id_producto)` — optimiza la navegación `@ManyToOne producto` y el bloqueo pesimista
+    - Crear `idx_producto_categoria` en `producto(id_producto_categoria)` — optimiza `buscarPorCategoria` y `buscarPorCategoriaYNombre`
+    - Crear `idx_producto_nombre_trgm` usando `GIN (LOWER(nombre_producto) gin_trgm_ops)` — optimiza búsquedas `LIKE '%...%'` en nombre
+    - Crear `idx_producto_descripcion_trgm` usando `GIN (LOWER(descripcion_producto) gin_trgm_ops)` — optimiza búsquedas `LIKE '%...%'` en descripción
+    - Crear `idx_codigo_verificacion_id_usuario` en `usuario_codigo_verificacion(id_usuario)` — optimiza `findByUsuario` y `deleteByIdUsuario`
+    - Usar `CREATE INDEX IF NOT EXISTS` en todos los índices para que el script sea idempotente
+    - _Requirements: 14.1 – 14.11_
+
+  - [ ] 16.2 Añadir anotaciones `@Table(indexes = {...})` en las entidades JPA afectadas (opcional, para documentar los índices en el modelo)
+    - En `CompraEntity`: agregar `@Table(name = "compra", indexes = { @Index(name = "idx_compra_id_usuario", columnList = "id_usuario"), @Index(name = "idx_compra_fecha_compra", columnList = "fecha_compra"), @Index(name = "idx_compra_estado", columnList = "compra_estado") })`
+    - En `CompraDetalleEntity`: agregar `@Table(name = "compra_detalle", indexes = { @Index(name = "idx_compra_detalle_id_compra", columnList = "id_compra"), @Index(name = "idx_compra_detalle_id_producto", columnList = "id_producto") })`
+    - En `ProductoEntity`: agregar `@Table(name = "producto", indexes = { @Index(name = "idx_producto_categoria", columnList = "id_producto_categoria") })`
+    - **Nota**: los índices GIN (trigrama) no se pueden declarar en `@Table(indexes)` porque JPA no soporta `USING GIN`; solo se crean vía el script DDL del paso 16.1
+    - _Requirements: 14.1 – 14.8_
 
 ---
 
@@ -262,6 +285,9 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
 - El `RateLimitingFilter` se registra antes del `JwtAuthenticationFilter` para rechazar peticiones que excedan el límite antes de validar el JWT.
 - Los límites de rate limiting se aplican por combinación de `{IP, endpoint}`, no por IP global.
 - La inicialización de buckets es perezosa: el bucket de un cliente se crea en su primera petición usando `computeIfAbsent` para garantizar thread-safety.
+- Los índices GIN con `pg_trgm` (tarea 16.1) no son declarables en `@Table(indexes)` de JPA; deben crearse exclusivamente vía script DDL.
+- La extensión `pg_trgm` debe habilitarse una sola vez por base de datos con permisos de superusuario o rol `CREATEROLE`.
+- La tarea 16.2 es opcional: agregar `@Table(indexes)` en las entidades sirve solo como documentación en el modelo; no genera los índices GIN ni reemplaza el script DDL.
 
 ## Task Dependency Graph
 
@@ -276,7 +302,8 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     { "id": 5, "tasks": ["6.5", "6.6", "12.1", "12.2", "12.3"] },
     { "id": 6, "tasks": ["12.4"] },
     { "id": 7, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5", "14.6", "15.1", "15.2"] },
-    { "id": 8, "tasks": ["15.3"] }
+    { "id": 8, "tasks": ["15.3"] },
+    { "id": 9, "tasks": ["16.1", "16.2"] }
   ]
 }
 ```
