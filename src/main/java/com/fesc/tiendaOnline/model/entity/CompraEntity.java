@@ -14,6 +14,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -24,7 +25,11 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "compra")
+@Table(name = "compra", indexes = {
+    @Index(name = "idx_compra_id_usuario", columnList = "id_usuario"),
+    @Index(name = "idx_compra_fecha_compra", columnList = "fecha_compra"),
+    @Index(name = "idx_compra_estado", columnList = "compra_estado")
+})
 public class CompraEntity {
 
     @Id

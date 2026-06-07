@@ -319,3 +319,25 @@ Este documento describe los requisitos para cuatro mejoras técnicas en la tiend
     ```
 
 11. WHEN se aplican los índices anteriores, THE aplicación SHALL registrar los scripts DDL de creación de índices en un archivo de migración de base de datos (por ejemplo, `V2__add_indexes.sql` si se usa Flyway, o como script ejecutable en el arranque), de modo que los índices se apliquen de forma reproducible en cualquier entorno.
+
+---
+
+### Requirement 15: Seguridad en el flujo de recuperación de contraseña
+
+**User Story:** Como usuario, quiero que el endpoint de cambio de contraseña solo pueda ser invocado si previamente completé con éxito la verificación del código de recuperación, de modo que un atacante no pueda cambiar mi contraseña simplemente conociendo mi email, sin haber pasado por la verificación del código.
+
+#### Acceptance Criteria
+
+1. WHEN el usuario invoca `POST /usuario/recuperar/cambiar-contrasena`, THE `UsuarioService` SHALL verificar que existe un `UsuarioCodigoVerificacionEntity` activo asociado al email y que su campo `codigoVerificado` sea `true`; si el campo es `false`, SHALL lanzar una excepción con el mensaje `"Debes verificar el codigo de recuperacion antes de cambiar la contrasena"`.
+
+2. WHEN el usuario completa exitosamente `POST /usuario/recuperar/verificar` con un código correcto y no expirado, THE `UsuarioService` SHALL establecer `codigoVerificado = true` en el `UsuarioCodigoVerificacionEntity` correspondiente y persistir el cambio en la base de datos.
+
+3. WHEN `UsuarioCodigoVerificacionEntity` es creado (al solicitar recuperación o verificación de cuenta), THE entidad SHALL inicializar el campo `codigoVerificado` en `false` como valor por defecto, garantizando que no exista ninguna ventana de tiempo en la que el endpoint de cambio de contraseña sea accesible sin verificación previa.
+
+4. WHEN el `UsuarioService` ejecuta `cambiarContrasenaRecuperacion` exitosamente, THE `UsuarioService` SHALL eliminar el `UsuarioCodigoVerificacionEntity` (incluyendo el flag `codigoVerificado`) mediante `deleteByIdUsuario`, de modo que el token de sesión de recuperación quede invalidado y no pueda reutilizarse.
+
+5. IF el `UsuarioCodigoVerificacionEntity` ha expirado (`expiracion` anterior a `LocalDateTime.now()`) al momento de invocar `cambiarContrasenaRecuperacion`, THEN THE `UsuarioService` SHALL lanzar una excepción con el mensaje `"El proceso de recuperacion ha expirado. Solicita un nuevo codigo"`, independientemente del valor de `codigoVerificado`.
+
+6. THE `UsuarioCodigoVerificacionEntity` SHALL declarar el campo `codigoVerificado` como columna persistida con nombre `codigo_verificado`, tipo booleano no nulo, con valor por defecto `false` a nivel de entidad JPA.
+
+7. WHEN un atacante invoca `POST /usuario/recuperar/cambiar-contrasena` sin haber pasado por `POST /usuario/recuperar/verificar`, THE sistema SHALL retornar una respuesta de error que no revele información sobre el estado interno del código de verificación (si existe o no), más allá del mensaje de que el proceso de recuperación no está activo o no fue verificado.

@@ -37,4 +37,9 @@ public class UsuarioCodigoVerificacionEntity {
 
     @Column(name = "expiracion", nullable = false)
     private LocalDateTime expiracion;
+
+    // Se establece en true solo cuando el usuario valida correctamente el código.
+    // El endpoint de cambio de contraseña exige que este flag sea true.
+    @Column(name = "codigo_verificado", nullable = false)
+    private boolean codigoVerificado = false;
 }

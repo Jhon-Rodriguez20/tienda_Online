@@ -69,7 +69,7 @@ public class UsuarioService {
         usuario.setPais(usuarioCreateDTO.getPais());
         usuario.setDireccion(usuarioCreateDTO.getDireccion());
         usuario.setCiudad(usuarioCreateDTO.getCiudad());
-        usuario.setCodigoPostal(usuarioCreateDTO.getCodigoPostal());
+        usuario.setCodigoPostal(usuarioCreateDTO.getCodigoPostal() != null ? usuarioCreateDTO.getCodigoPostal() : "Sin código Postal");
         usuario.setDepartamento(usuarioCreateDTO.getDepartamento());
         usuario.setContrasenaEncp(passwordEncoder.encode(usuarioCreateDTO.getContrasena()));
         usuario.setEstado(UsuarioEstado.INACTIVO);
@@ -156,6 +156,10 @@ public class UsuarioService {
             manejarIntentoFallidoRecuperacion(usuario);
             throw new BusinessRuleException("Codigo de verificacion incorrecto");
         }
+
+        // Marcar que el código fue verificado exitosamente.
+        codigoEntity.setCodigoVerificado(true);
+        usuarioCodigoVerificacionRepository.save(codigoEntity);
     }
 
     @Transactional
@@ -169,6 +173,11 @@ public class UsuarioService {
                 "No hay proceso de recuperacion activo. Solicita un nuevo codigo");
         usuarioValidationService.validarCodigoNoExpirado(codigoEntity, usuario.getIdUsuario(),
                 "El proceso de recuperacion ha expirado. Solicita un nuevo codigo");
+
+        // Verificar que el usuario haya validado el código antes de cambiar la contraseña.
+        if (!codigoEntity.isCodigoVerificado()) {
+            throw new BusinessRuleException("Debes verificar el codigo de recuperacion antes de cambiar la contrasena");
+        }
 
         usuario.setContrasenaEncp(passwordEncoder.encode(cambiarDTO.getNuevaContrasena()));
         usuarioRepository.save(usuario);
@@ -233,7 +242,7 @@ public class UsuarioService {
         responseDTO.setDireccion(usuarioEntity.getDireccion());
         responseDTO.setDepartamento(usuarioEntity.getDepartamento());
         responseDTO.setCiudad(usuarioEntity.getCiudad());
-        responseDTO.setCodigoPostal(usuarioEntity.getCodigoPostal() != null ? usuarioEntity.getCodigoPostal() : "Sin código postal");
+        responseDTO.setCodigoPostal(usuarioEntity.getCodigoPostal());
         responseDTO.setEstado(usuarioEntity.getEstado().toString());
         responseDTO.setRol(usuarioEntity.getUsuarioRol().getRolUsuario());
         responseDTO.setUrlImagen(usuarioEntity.getUrlImagen());

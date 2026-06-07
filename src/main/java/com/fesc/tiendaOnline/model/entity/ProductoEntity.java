@@ -7,6 +7,7 @@ import org.hibernate.annotations.UuidGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -16,7 +17,9 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "producto")
+@Table(name = "producto", indexes = {
+    @Index(name = "idx_producto_categoria", columnList = "id_producto_categoria")
+})
 public class ProductoEntity {
 
     @Id

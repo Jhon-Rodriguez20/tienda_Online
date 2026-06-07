@@ -247,8 +247,8 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Test para cliente esperando el tiempo indicado en `Retry-After` → puede volver a hacer peticiones exitosamente
     - _Requirements: 13.3, 13.4, 13.5, 13.7_
 
-- [ ] 16. Crear script de índices de base de datos PostgreSQL
-  - [ ] 16.1 Habilitar la extensión `pg_trgm` y crear todos los índices en un script DDL
+- [x] 16. Crear script de índices de base de datos PostgreSQL
+  - [x] 16.1 Habilitar la extensión `pg_trgm` y crear todos los índices en un script DDL
     - Crear el archivo `src/main/resources/db/migration/V2__add_indexes.sql` (o el script equivalente si no se usa Flyway)
     - Agregar `CREATE EXTENSION IF NOT EXISTS pg_trgm;` al inicio del script
     - Crear `idx_compra_id_usuario` en `compra(id_usuario)` — optimiza `findByUsuarioId`, `findByUsuarioIdAndNumeroCompra`, `findByUsuarioIdAndFechaBetween`
@@ -263,7 +263,7 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Usar `CREATE INDEX IF NOT EXISTS` en todos los índices para que el script sea idempotente
     - _Requirements: 14.1 – 14.11_
 
-  - [ ] 16.2 Añadir anotaciones `@Table(indexes = {...})` en las entidades JPA afectadas (opcional, para documentar los índices en el modelo)
+  - [x] 16.2 Añadir anotaciones `@Table(indexes = {...})` en las entidades JPA afectadas (opcional, para documentar los índices en el modelo)
     - En `CompraEntity`: agregar `@Table(name = "compra", indexes = { @Index(name = "idx_compra_id_usuario", columnList = "id_usuario"), @Index(name = "idx_compra_fecha_compra", columnList = "fecha_compra"), @Index(name = "idx_compra_estado", columnList = "compra_estado") })`
     - En `CompraDetalleEntity`: agregar `@Table(name = "compra_detalle", indexes = { @Index(name = "idx_compra_detalle_id_compra", columnList = "id_compra"), @Index(name = "idx_compra_detalle_id_producto", columnList = "id_producto") })`
     - En `ProductoEntity`: agregar `@Table(name = "producto", indexes = { @Index(name = "idx_producto_categoria", columnList = "id_producto_categoria") })`
@@ -272,9 +272,42 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
 
 ---
 
+- [x] 17. Corrección de seguridad en el flujo de recuperación de contraseña
+  - [x] 17.1 Agregar campo `codigoVerificado` en `UsuarioCodigoVerificacionEntity`
+    - Agregar `@Column(name = "codigo_verificado", nullable = false)` con tipo `boolean` e inicialización `= false`
+    - El valor por defecto `false` garantiza que cualquier código recién creado no autoriza el cambio de contraseña sin verificación
+    - Si la BD ya existe, aplicar: `ALTER TABLE usuario_codigo_verificacion ADD COLUMN IF NOT EXISTS codigo_verificado BOOLEAN NOT NULL DEFAULT FALSE;`
+    - _Requirements: 15.3, 15.6_
+
+  - [x] 17.2 Modificar `verificarCodigoRecuperacion` en `UsuarioService` para marcar el flag
+    - Al final del método, tras validar código correcto y no expirado, agregar `codigoEntity.setCodigoVerificado(true)` y `usuarioCodigoVerificacionRepository.save(codigoEntity)`
+    - _Requirements: 15.2_
+
+  - [x] 17.3 Modificar `cambiarContrasenaRecuperacion` en `UsuarioService` para exigir el flag
+    - Tras obtener `codigoEntity` y validar que no expiró, agregar: `if (!codigoEntity.isCodigoVerificado()) { throw new BusinessRuleException("Debes verificar el codigo de recuperacion antes de cambiar la contrasena"); }`
+    - _Requirements: 15.1, 15.7_
+
+  - [x] 17.4 Escribir property tests para la corrección de seguridad
+    - **Property 21**: Para cualquier usuario con `codigoVerificado = false`, `cambiarContrasenaRecuperacion` debe lanzar excepción sin modificar la contraseña
+    - **Property 22**: Para cualquier código válido y no expirado, tras `verificarCodigoRecuperacion` exitoso, `codigoVerificado` debe ser `true`
+    - **Property 23**: Para cualquier `UsuarioCodigoVerificacionEntity` recién creado, `codigoVerificado` debe ser `false`
+    - **Property 24**: Tras `cambiarContrasenaRecuperacion` exitoso, no debe existir `UsuarioCodigoVerificacionEntity` para ese usuario
+    - Usar `@Property` de jqwik en `UsuarioServicePropertyTest.java`
+    - _Requirements: 15.1, 15.2, 15.3, 15.4_
+
+  - [x] 17.5 Escribir tests unitarios para casos de borde del flujo de recuperación
+    - Test: invocar `cambiarContrasenaRecuperacion` sin pasar por `verificarCodigoRecuperacion` → debe retornar error de negocio
+    - Test: invocar `cambiarContrasenaRecuperacion` con código expirado (aunque `codigoVerificado = true`) → debe retornar error de expiración
+    - Test: flujo completo exitoso → contraseña cambiada, `UsuarioCodigoVerificacionEntity` eliminado, email de confirmación enviado
+    - _Requirements: 15.1, 15.4, 15.5_
+
+---
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido.
+- Las tareas 17.1–17.3 ya están implementadas en el código fuente. Las tareas 17.4–17.5 (tests) quedan pendientes de implementar.
+- El campo `codigoVerificado` usa el valor por defecto `false` a nivel de entidad JPA; en bases de datos existentes se debe ejecutar el ALTER TABLE del paso 17.1 manualmente o vía script de migración.
 - Cada tarea referencia los requisitos específicos para trazabilidad.
 - Los checkpoints garantizan validación incremental antes de continuar.
 - Los property tests usan jqwik con `@Property(tries = 100)` mínimo.
@@ -303,7 +336,8 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     { "id": 6, "tasks": ["12.4"] },
     { "id": 7, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5", "14.6", "15.1", "15.2"] },
     { "id": 8, "tasks": ["15.3"] },
-    { "id": 9, "tasks": ["16.1", "16.2"] }
+    { "id": 9, "tasks": ["16.1", "16.2", "17.1", "17.2", "17.3"] },
+    { "id": 10, "tasks": ["17.4", "17.5"] }
   ]
 }
 ```

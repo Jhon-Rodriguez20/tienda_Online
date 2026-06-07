@@ -1014,3 +1014,117 @@ CREATE INDEX IF NOT EXISTS idx_codigo_verificacion_id_usuario
 ```
 
 > **Decisión de diseño**: Se usa `CREATE INDEX IF NOT EXISTS` para que el script sea idempotente y pueda ejecutarse en entornos donde algunos índices ya existan (por ejemplo, si la BD se creó con la versión anterior del esquema). Si no se usa Flyway, este script puede ejecutarse manualmente una sola vez por entorno.
+
+---
+
+## 16. Seguridad en el flujo de recuperación de contraseña
+
+### Problema
+
+El endpoint `POST /usuario/recuperar/cambiar-contrasena` solo verificaba que existiera un `UsuarioCodigoVerificacionEntity` activo y no expirado. Esto permite a un atacante que conozca el email de una víctima invocar este endpoint directamente sin haber pasado por la verificación del código, si puede adivinar que hay un código activo. El flujo tenía tres pasos pero el tercero no validaba que el segundo hubiera sido completado.
+
+### Solución adoptada
+
+Se agrega el campo `codigoVerificado` (boolean, default `false`) a `UsuarioCodigoVerificacionEntity`. Este campo actúa como un flag de sesión de recuperación: se establece en `true` únicamente cuando el usuario completa con éxito `verificarCodigoRecuperacion`. El endpoint `cambiarContrasenaRecuperacion` exige que el flag sea `true` antes de proceder.
+
+**Alternativas consideradas:**
+
+| Alternativa | Pros | Contras | Decisión |
+|---|---|---|---|
+| Token JWT de reset en respuesta de `/verificar` | Estándar de industria, stateless | Requiere nueva infraestructura de generación/validación JWT, expone el token en la respuesta | Descartada por complejidad innecesaria |
+| Campo `codigoVerificado` en entidad existente | Sin nueva infraestructura, coherente con el modelo existente, limpieza automática al final del flujo | Estado de sesión en BD (stateful) | **Adoptada** |
+| Tabla separada de tokens de reset | Máxima separación de responsabilidades | Nueva migración de esquema, más código | Descartada por sobredimensionada |
+
+### Cambios en el modelo de datos
+
+**`UsuarioCodigoVerificacionEntity`** — campo agregado:
+
+```java
+// Se establece en true solo cuando el usuario valida correctamente el código.
+// El endpoint de cambio de contraseña exige que este flag sea true.
+@Column(name = "codigo_verificado", nullable = false)
+private boolean codigoVerificado = false;
+```
+
+**Script DDL requerido** para la columna en la base de datos existente:
+
+```sql
+ALTER TABLE usuario_codigo_verificacion
+    ADD COLUMN IF NOT EXISTS codigo_verificado BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+> **Nota**: Si la tabla se crea desde cero (Hibernate `ddl-auto=create`), la columna se genera automáticamente. En bases de datos existentes se debe ejecutar este ALTER.
+
+### Cambios en `UsuarioService`
+
+**`verificarCodigoRecuperacion`** — marca el flag al validar con éxito:
+
+```java
+// Al final del método, tras validar código correcto y no expirado:
+codigoEntity.setCodigoVerificado(true);
+usuarioCodigoVerificacionRepository.save(codigoEntity);
+```
+
+**`cambiarContrasenaRecuperacion`** — exige el flag antes de cambiar:
+
+```java
+// Tras obtener codigoEntity y validar que no expiró:
+if (!codigoEntity.isCodigoVerificado()) {
+    throw new BusinessRuleException(
+        "Debes verificar el codigo de recuperacion antes de cambiar la contrasena");
+}
+// Continuar con el cambio de contraseña...
+```
+
+### Flujo completo corregido
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant UC as UsuarioController
+    participant US as UsuarioService
+    participant DB as PostgreSQL
+
+    C->>UC: POST /recuperar/solicitar {email}
+    UC->>US: solicitarRecuperacionContrasena(email)
+    US->>DB: generarYEnviarCodigoVerificacion (codigoVerificado=false)
+    US-->>C: 200 OK
+
+    C->>UC: POST /recuperar/verificar {email, codigo}
+    UC->>US: verificarCodigoRecuperacion(email, codigo)
+    US->>DB: validar código + expiración
+    alt código correcto
+        US->>DB: codigoEntity.codigoVerificado = true
+        US-->>C: 200 OK
+    else código incorrecto o expirado
+        US-->>C: 400/401 Error
+    end
+
+    C->>UC: POST /recuperar/cambiar-contrasena {email, nuevaContrasena, confirmarContrasena}
+    UC->>US: cambiarContrasenaRecuperacion(dto)
+    US->>DB: obtener codigoEntity
+    alt codigoVerificado == true
+        US->>DB: setContrasena(nuevaHash) + deleteByIdUsuario
+        US-->>C: 200 OK
+    else codigoVerificado == false
+        US-->>C: 400 "Debes verificar el codigo..."
+    end
+```
+
+### Propiedades de corrección
+
+**Property 21: El cambio de contraseña requiere verificación previa**
+Para cualquier usuario con un `UsuarioCodigoVerificacionEntity` donde `codigoVerificado = false`, invocar `cambiarContrasenaRecuperacion` debe lanzar `BusinessRuleException` sin modificar la contraseña del usuario.
+**Valida: Requirement 15.1**
+
+**Property 22: La verificación exitosa activa el flag**
+Para cualquier usuario con un código válido y no expirado, tras ejecutar `verificarCodigoRecuperacion` con el código correcto, el `UsuarioCodigoVerificacionEntity` debe tener `codigoVerificado = true` en la base de datos.
+**Valida: Requirement 15.2**
+
+**Property 23: El flag se inicializa en false**
+Para cualquier `UsuarioCodigoVerificacionEntity` recién creado (al solicitar recuperación), el campo `codigoVerificado` debe ser `false`, nunca `true`.
+**Valida: Requirement 15.3**
+
+**Property 24: Limpieza del token de sesión tras cambio exitoso**
+Para cualquier cambio de contraseña exitoso, no debe existir ningún `UsuarioCodigoVerificacionEntity` asociado al usuario en la base de datos tras la operación.
+**Valida: Requirement 15.4**

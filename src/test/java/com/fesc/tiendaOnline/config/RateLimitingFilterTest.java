@@ -3,7 +3,7 @@ package com.fesc.tiendaOnline.config;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.junit.jupiter.api.BeforeEach;
+// import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.exceptions.verification.WantedButNotInvoked;
@@ -268,7 +268,7 @@ class RateLimitingFilterTest {
                .addHeader(headerNameCaptor.capture(), headerValueCaptor.capture());
 
         List<String> names  = headerNameCaptor.getAllValues();
-        List<String> values = headerValueCaptor.getAllValues();
+        // List<String> values = headerValueCaptor.getAllValues();
 
         int retryAfterIdx = findHeaderIndex(names, "Retry-After");
         assertThat(retryAfterIdx)
