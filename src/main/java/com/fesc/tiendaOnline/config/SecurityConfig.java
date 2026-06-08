@@ -79,6 +79,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/compras/admin/todas").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/compras/admin/{compraId}/estado").hasRole("ADMIN")
                 // Compras: rutas cliente
+                .requestMatchers(HttpMethod.GET, "/compras/metodo/pago").hasRole("CLIENTE")
                 .requestMatchers(HttpMethod.POST, "/compras/realizar").hasRole("CLIENTE")
                 .requestMatchers(HttpMethod.POST, "/compras/mis-compras").hasRole("CLIENTE")
                 .requestMatchers(HttpMethod.DELETE, "/compras/{compraId}/cancelar").hasRole("CLIENTE")

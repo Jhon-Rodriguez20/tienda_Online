@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fesc.tiendaOnline.model.dto.ActualizarEstadoCompraDTO;
 import com.fesc.tiendaOnline.model.dto.CompraBusquedaDTO;
+import com.fesc.tiendaOnline.model.dto.CompraMetodoPagoResponseDTO;
 import com.fesc.tiendaOnline.model.dto.CompraRequestDTO;
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
 import com.fesc.tiendaOnline.model.dto.IdempotencyResult;
@@ -61,6 +62,14 @@ public class CompraService {
         this.adminValidationService = adminValidationService;
         this.usuarioValidationService = usuarioValidationService;
         this.idempotencyStore = idempotencyStore;
+    }
+
+    // OBTENER TODOS LOS METODOS DE PAGO PARA COMPRA
+    @Transactional(readOnly = true)
+    public List<CompraMetodoPagoResponseDTO> getMetodoPago() {
+        return metodoPagoRepository.findAll().stream()
+            .map(this::metodoPagoConvertirAResponseDTO)
+            .collect(Collectors.toList());
     }
 
     // CREAR COMPRA - SOLO CLIENTES
@@ -315,6 +324,13 @@ public class CompraService {
         response.setDetalles(detalles);
         
         return response;
+    }
+
+    private CompraMetodoPagoResponseDTO metodoPagoConvertirAResponseDTO(MetodoPagoCompraEntity metodoPagoCompraEntity) {
+        CompraMetodoPagoResponseDTO responseDTO = new CompraMetodoPagoResponseDTO();
+        responseDTO.setIdMetodoPago(metodoPagoCompraEntity.getIdMetodoPago());
+        responseDTO.setMetodoPago(metodoPagoCompraEntity.getMetodoPago());
+        return responseDTO;
     }
 
     private PaginacionResponseDTO<CompraResponseDTO> convertirAPaginacionResponse(Page<CompraEntity> paginaCompras) {

@@ -1,6 +1,7 @@
 package com.fesc.tiendaOnline.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fesc.tiendaOnline.model.dto.ActualizarEstadoCompraDTO;
 import com.fesc.tiendaOnline.model.dto.CompraBusquedaDTO;
+import com.fesc.tiendaOnline.model.dto.CompraMetodoPagoResponseDTO;
 import com.fesc.tiendaOnline.model.dto.CompraRequestDTO;
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
 import com.fesc.tiendaOnline.model.dto.IdempotencyResult;
@@ -83,6 +85,11 @@ public class CompraController {
         UUID usuarioId = obtenerIdUsuarioAutenticado();
         PaginacionResponseDTO<CompraResponseDTO> compras = compraService.getMisCompras(usuarioId, busquedaDTO);
         return ResponseEntity.ok(compras);
+    }
+    
+    @GetMapping("/metodo/pago")
+    public ResponseEntity<List<CompraMetodoPagoResponseDTO>> listMetodosPagos() {
+        return ResponseEntity.ok(compraService.getMetodoPago());
     }
 
     @GetMapping("/{compraId}")
