@@ -1,6 +1,7 @@
 package com.fesc.tiendaOnline.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoBusquedaDTO;
+import com.fesc.tiendaOnline.model.dto.ProductoCategoriaResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoCreateDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoUpdateDTO;
@@ -79,6 +81,12 @@ public class ProductoController {
     public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarAvanzado(@RequestBody ProductoBusquedaDTO productoBusquedaDTO) {
         PaginacionResponseDTO<ProductoResponseDTO> productos = productoService.buscarProductosAvanzado(productoBusquedaDTO);
         return ResponseEntity.ok(productos);
+    }
+
+    @GetMapping("/categorias")
+    public ResponseEntity<List<ProductoCategoriaResponseDTO>> listCategorias() {
+        UUID idAdmin = obtenerIdUsuarioAutenticado();
+        return ResponseEntity.ok(productoService.getCategorias(idAdmin));
     }
 
     @GetMapping("/{idProducto}")

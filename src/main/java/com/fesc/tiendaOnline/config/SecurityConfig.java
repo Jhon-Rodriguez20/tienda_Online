@@ -66,9 +66,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/usuario/recuperar/verificar").permitAll()
                 .requestMatchers(HttpMethod.POST, "/usuario/recuperar/cambiar-contrasena").permitAll()
                 // Productos: lectura pública
-                .requestMatchers(HttpMethod.GET, "/productos", "/productos/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/productos/buscar/avanzado").permitAll()
+                .requestMatchers(HttpMethod.GET, "/productos", "/productos/{idProducto}").permitAll()
                 .requestMatchers(HttpMethod.GET, "/productos/buscar", "/productos/buscar/nombre").permitAll()
+                .requestMatchers(HttpMethod.POST, "/productos/buscar/avanzado").permitAll()
+                // Productos: solo ADMIN
+                .requestMatchers(HttpMethod.GET, "/productos/categorias").hasRole("ADMIN")
                 // Archivos estáticos
                 .requestMatchers("/uploads/**", "/images/**").permitAll()
                 // Productos: escritura solo ADMIN
@@ -99,9 +101,13 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", "Content-Type", "Accept", "X-Requested-With"
+            "Authorization", "Content-Type", "Accept", "X-Requested-With",
+            "Idempotency-Key", "X-Forwarded-For"
         ));
-        configuration.setExposedHeaders(Arrays.asList("Authorization"));
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization", "Idempotency-Replayed",
+            "X-RateLimit-Remaining", "X-RateLimit-Limit", "Retry-After"
+        ));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

@@ -3,6 +3,7 @@ package com.fesc.tiendaOnline.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoBusquedaDTO;
+import com.fesc.tiendaOnline.model.dto.ProductoCategoriaResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoCreateDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoUpdateDTO;
@@ -73,6 +75,15 @@ public class ProductoService {
         }
         Page<ProductoEntity> paginaProductos = productoRepository.buscarPorNombre(nombre.trim(), pageable);
         return convertirAPaginacionResponse(paginaProductos);
+    }
+
+    //BUSCAR CATEGORÍAS DE PRODUCTOS
+    @Transactional(readOnly = true)
+    public List<ProductoCategoriaResponseDTO> getCategorias(UUID idAdmin) {
+        adminValidationService.validarAdmin(idAdmin);
+        return categoriaRepository.findAll().stream()
+            .map(this::productoCategoriaConvertirAResponse)
+            .collect(Collectors.toList());
     }
 
     // BUSQUEDA AVANZADA CON MULTIPLES FILTROS - DISPONIBLE PARA TODOS LOS USUARIOS
@@ -201,6 +212,14 @@ public class ProductoService {
         response.setNombreUsuario(producto.getUsuario().getNombre());
         
         return response;
+    }
+
+    //METDO PARA CONVERTIR A RESPONSE LAS CATEGORIAS DE LOS PRODUCTOS
+    private ProductoCategoriaResponseDTO productoCategoriaConvertirAResponse(CategoriaEntity categoriaEntity) {
+        ProductoCategoriaResponseDTO responseDTO = new ProductoCategoriaResponseDTO();
+        responseDTO.setIdCategoria(categoriaEntity.getIdCategoria());
+        responseDTO.setNombreCategoria(categoriaEntity.getNombreCategoria());
+        return responseDTO;
     }
 
     // METODO PARA CONVERTIR PAGINA DE ENTIDADES A PAGINA DE DTOs

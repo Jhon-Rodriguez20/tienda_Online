@@ -14,9 +14,8 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.function.Function;
 
-import org.springframework.core.io.Resource;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
@@ -25,7 +24,6 @@ import com.fesc.tiendaOnline.security.UserDetailsImpl;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import jakarta.annotation.PostConstruct;
 
 @Service
@@ -62,15 +60,15 @@ public class JwtService {
         Instant expiresAt = now.plusMillis(expiration);
 
         return Jwts.builder()
-                .setHeaderParam("typ", "JWT")
-                .setId(UUID.randomUUID().toString())
-                .setSubject(usuario.getIdUsuario().toString())
-                .setIssuer(issuer)
-                .setAudience(audience)
-                .setIssuedAt(Date.from(now))
-                .setNotBefore(Date.from(now))
-                .setExpiration(Date.from(expiresAt))
-                .signWith(privateKey, SignatureAlgorithm.RS256)
+                .header().add("typ", "JWT").and()
+                .id(UUID.randomUUID().toString())
+                .subject(usuario.getIdUsuario().toString())
+                .issuer(issuer)
+                .audience().add(audience).and()
+                .issuedAt(Date.from(now))
+                .notBefore(Date.from(now))
+                .expiration(Date.from(expiresAt))
+                .signWith(privateKey)
                 .compact();
     }
 
@@ -83,39 +81,30 @@ public class JwtService {
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
+        return claimsResolver.apply(extractAllClaims(token));
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(publicKey)
+        return Jwts.parser()
+                .verifyWith(publicKey)
                 .requireIssuer(issuer)
                 .requireAudience(audience)
-                .setAllowedClockSkewSeconds(30)
+                .clockSkewSeconds(30)
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
-    private Boolean isTokenExpired(String token) {
-        return extractExpirationToken(token).before(new Date());
-    }
-
-    public Boolean validateToken(String token, UsuarioEntity usuario) {
-        final UUID idUsuario = extractIdUsuario(token);
+    public boolean validateToken(String token, UsuarioEntity usuario) {
+        UUID idUsuario = extractIdUsuario(token);
         return idUsuario.equals(usuario.getIdUsuario())
-            && UsuarioEstado.ACTIVO.equals(usuario.getEstado())
-            && !isTokenExpired(token);
+                && UsuarioEstado.ACTIVO.equals(usuario.getEstado());
     }
 
-    public Boolean validateToken(String token, UserDetails userDetails) {
+    public boolean validateToken(String token, UserDetailsImpl userDetails) {
         Claims claims = extractAllClaims(token);
-        UserDetailsImpl userDetailsImpl = (UserDetailsImpl) userDetails;
-
-        return claims.getSubject().equals(userDetailsImpl.getUsuario().getIdUsuario().toString())
-            && userDetails.isEnabled()
-            && !isTokenExpired(token);
+        return claims.getSubject().equals(userDetails.getUsuario().getIdUsuario().toString())
+                && userDetails.isEnabled();
     }
 
     public Long getExpirationTimeToken() {

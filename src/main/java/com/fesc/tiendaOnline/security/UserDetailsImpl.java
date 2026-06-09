@@ -1,5 +1,6 @@
 package com.fesc.tiendaOnline.security;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -42,10 +43,11 @@ public class UserDetailsImpl implements UserDetails {
     public boolean isAccountNonExpired() {
         return true;
     }
-    
+
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        LocalDateTime bloqueadoHasta = usuario.getBloqueadoHasta();
+        return bloqueadoHasta == null || bloqueadoHasta.isBefore(LocalDateTime.now());
     }
     
     @Override

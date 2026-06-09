@@ -42,8 +42,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (path.equals("/usuario/reenviar-codigo")) return true;
         if (path.startsWith("/usuario/recuperar/")) return true;
 
-        // Productos de solo lectura y búsqueda
-        if ("GET".equals(method) && (path.equals("/productos") || path.startsWith("/productos/"))) return true;
+        // Productos de solo lectura y búsqueda — excluye /categorias que requiere ADMIN
+        if ("GET".equals(method) && path.equals("/productos")) return true;
+        if ("GET".equals(method) && path.startsWith("/productos/") && !path.equals("/productos/categorias")) return true;
         if ("POST".equals(method) && path.equals("/productos/buscar/avanzado")) return true;
 
         // Archivos estáticos
@@ -73,7 +74,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(idUsuario.toString());
 
                 if (jwtService.validateToken(token,
-                        ((com.fesc.tiendaOnline.security.UserDetailsImpl) userDetails).getUsuario())) {
+                        (com.fesc.tiendaOnline.security.UserDetailsImpl) userDetails)) {
 
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());

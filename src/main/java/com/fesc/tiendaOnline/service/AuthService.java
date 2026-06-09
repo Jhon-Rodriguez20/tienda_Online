@@ -17,11 +17,13 @@ public class AuthService {
     private final JwtService jwtService;
     private final BCryptPasswordEncoder passwordEncoder;
 
+    // Inyecta el bean BCryptPasswordEncoder declarado en SecurityConfig,
     public AuthService(UsuarioValidationService usuarioValidationService,
-            JwtService jwtService) {
+            JwtService jwtService,
+            BCryptPasswordEncoder passwordEncoder) {
         this.usuarioValidationService = usuarioValidationService;
         this.jwtService = jwtService;
-        this.passwordEncoder = new BCryptPasswordEncoder();
+        this.passwordEncoder = passwordEncoder;
     }
 
     public ResponseEntity<LoginResponseDTO> login(LoginRequestDTO loginRequest) {
