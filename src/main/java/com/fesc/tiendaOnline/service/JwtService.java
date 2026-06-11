@@ -14,7 +14,10 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.function.Function;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
@@ -29,8 +32,11 @@ import jakarta.annotation.PostConstruct;
 @Service
 public class JwtService {
 
-    @Value("${jwt.expiration}")
+    @Value("${jwt.expiration:900000}")
     private Long expiration;
+
+    @Autowired
+    private Environment environment;
 
     @Value("${jwt.issuer:tienda-online-api}")
     private String issuer;
@@ -51,8 +57,24 @@ public class JwtService {
 
     @PostConstruct
     void loadKeys() throws Exception {
+        
+        if (expiration > 900_000L) {
+            throw new IllegalStateException(
+                    "jwt.expiration no puede superar 15 minutos (900000 ms)");
+        }
+
         privateKey = readPrivateKey(privateKeyResource);
         publicKey = readPublicKey(publicKeyResource);
+
+        // Validar tamaño de clave RSA en perfil prod: mínimo 2048 bits
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            int modulusBitLength = publicKey.getModulus().bitLength();
+            if (modulusBitLength < 2048) {
+                throw new IllegalStateException(
+                        "La clave RSA debe tener al menos 2048 bits en el perfil prod. "
+                        + "Tamaño actual: " + modulusBitLength + " bits");
+            }
+        }
     }
 
     public String generateToken(UsuarioEntity usuario) {
@@ -74,6 +96,10 @@ public class JwtService {
 
     public UUID extractIdUsuario(String token) {
         return UUID.fromString(extractClaim(token, Claims::getSubject));
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
     }
 
     public Date extractExpirationToken(String token) {

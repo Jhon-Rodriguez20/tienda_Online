@@ -1128,3 +1128,510 @@ Para cualquier `UsuarioCodigoVerificacionEntity` recién creado (al solicitar re
 **Property 24: Limpieza del token de sesión tras cambio exitoso**
 Para cualquier cambio de contraseña exitoso, no debe existir ningún `UsuarioCodigoVerificacionEntity` asociado al usuario en la base de datos tras la operación.
 **Valida: Requirement 15.4**
+
+
+---
+
+## 17. Refresh Tokens y Revocación de Sesiones JWT
+
+### Problema
+
+El sistema actual emite un access token JWT con expiración configurable pero sin mecanismo de renovación ni revocación. Si el token es comprometido, permanece válido hasta su expiración. Tampoco existe endpoint de logout que invalide el token. Un usuario cuyo token expire debe volver a autenticarse sin alternativa.
+
+### Solución adoptada: Refresh Token con rotación
+
+Se emite un par de tokens en cada login:
+- **Access token**: JWT RS256, vida corta (máx. 15 min), lleva `jti` único.
+- **Refresh token**: UUID v4 opaco, persistido en BD, vida de 7 días. Se rota en cada uso.
+
+**Alternativas consideradas:**
+
+| Alternativa | Pros | Contras | Decisión |
+|---|---|---|---|
+| Solo access token de larga duración | Sin complejidad adicional | Ventana de ataque grande si el token es robado | Descartada |
+| Access token corto sin refresh | Seguridad máxima | UX degradada: re-login frecuente | Descartada |
+| Access token corto + refresh rotante (adoptado) | Balance seguridad/UX, revocación efectiva | Estado en BD para refresh tokens | **Adoptada** |
+| Redis como blacklist de JTI | Latencia baja, escalable | Dependencia externa nueva | Descartada (se usa Caffeine) |
+
+### Nuevos componentes
+
+#### `RefreshTokenEntity.java` (nueva entidad)
+
+```java
+@Entity
+@Table(name = "refresh_token")
+public class RefreshTokenEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id")
+    private UUID id;
+
+    @Column(name = "token", unique = true, nullable = false)
+    private String token;                          // UUID v4 opaco
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_usuario", nullable = false)
+    private UsuarioEntity usuario;
+
+    @Column(name = "fecha_expiracion", nullable = false)
+    private LocalDateTime fechaExpiracion;
+
+    @Column(name = "revocado", nullable = false)
+    private boolean revocado = false;
+
+    @Column(name = "fecha_creacion", nullable = false, updatable = false)
+    private LocalDateTime fechaCreacion = LocalDateTime.now();
+}
+```
+
+**Script DDL:**
+
+```sql
+CREATE TABLE IF NOT EXISTS refresh_token (
+    id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    token            VARCHAR(36) NOT NULL UNIQUE,
+    id_usuario       UUID        NOT NULL REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+    fecha_expiracion TIMESTAMP   NOT NULL,
+    revocado         BOOLEAN     NOT NULL DEFAULT FALSE,
+    fecha_creacion   TIMESTAMP   NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_token_token     ON refresh_token(token);
+CREATE INDEX IF NOT EXISTS idx_refresh_token_id_usuario ON refresh_token(id_usuario);
+```
+
+#### `RefreshTokenRepository.java` (nuevo repositorio)
+
+```java
+public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity, UUID> {
+    Optional<RefreshTokenEntity> findByToken(String token);
+    void revokeAllByUsuarioIdUsuario(UUID idUsuario);  // custom @Modifying query
+    void deleteByFechaExpiracionBefore(LocalDateTime threshold);  // limpieza periódica
+}
+```
+
+#### `JwtBlacklist.java` (nuevo componente)
+
+Componente en memoria basado en Caffeine para invalidar JTIs de access tokens tras logout:
+
+```java
+@Component
+public class JwtBlacklist {
+    // Cache con TTL dinámico: cada entrada expira cuando expira el token al que pertenece
+    private final Cache<String, Boolean> blacklistedJtis;
+
+    public JwtBlacklist(@Value("${jwt.blacklist.max-size:100000}") long maxSize) {
+        this.blacklistedJtis = Caffeine.newBuilder()
+                .maximumSize(maxSize)
+                .expireAfterWrite(15, TimeUnit.MINUTES)  // cota superior igual al max expiration
+                .build();
+    }
+
+    public void add(String jti) { blacklistedJtis.put(jti, Boolean.TRUE); }
+    public boolean isBlacklisted(String jti) { return blacklistedJtis.getIfPresent(jti) != null; }
+}
+```
+
+### Nuevos endpoints
+
+| Método | Ruta | Auth | Descripción |
+|---|---|---|---|
+| `POST` | `/auth/refresh` | Sin auth (solo refresh token en body) | Rota el refresh token y emite nuevo access token |
+| `POST` | `/auth/logout` | Access token Bearer | Revoca refresh token, agrega JTI a blacklist |
+
+#### Flujo de refresco
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant AC as AuthController
+    participant AS as AuthService
+    participant DB as PostgreSQL
+    participant BL as JwtBlacklist
+
+    C->>AC: POST /auth/refresh {refreshToken: "uuid"}
+    AC->>AS: refreshAccessToken(token)
+    AS->>DB: findByToken(token)
+    alt token válido, no revocado, no expirado
+        AS->>DB: revocar token anterior
+        AS->>DB: crear nuevo RefreshTokenEntity
+        AS->>AS: generateToken(usuario) → nuevo access token
+        AS-->>AC: {accessToken, refreshToken}
+        AC-->>C: 200 OK
+    else token inválido/revocado/expirado
+        AS-->>C: 401 "Refresh token inválido o expirado"
+    end
+```
+
+#### Flujo de logout
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant AC as AuthController
+    participant AS as AuthService
+    participant DB as PostgreSQL
+    participant BL as JwtBlacklist
+
+    C->>AC: POST /auth/logout [Bearer access_token]
+    AC->>AS: logout(jti, idUsuario)
+    AS->>BL: blacklist.add(jti)
+    AS->>DB: revokeAllByUsuarioIdUsuario(idUsuario)
+    AS-->>AC: void
+    AC-->>C: 204 No Content
+```
+
+### Modificaciones a componentes existentes
+
+**`AuthService`**: Agregar métodos `refreshAccessToken(String refreshToken)` y `logout(String jti, UUID idUsuario)`.
+
+**`JwtAuthenticationFilter`**: Tras extraer el `jti` del token, verificar `jwtBlacklist.isBlacklisted(jti)` antes de autenticar; si está en la lista, retornar HTTP 401.
+
+**`AuthController`**: Agregar endpoints `POST /auth/refresh` y `POST /auth/logout`. El endpoint de logout debe estar en la lista de rutas que requieren autenticación en `SecurityConfig`.
+
+**`LoginResponseDTO`**: Agregar campo `refreshToken: String`.
+
+### Propiedades de corrección (JWT seguridad)
+
+**Property 25: Rotación de refresh token**
+Para cualquier refresh token válido `R1`, tras invocar `/auth/refresh`, el token `R1` debe estar marcado como `revocado = true` en la BD, y se debe emitir un nuevo par `(accessToken2, refreshToken2)` donde `refreshToken2 ≠ R1`.
+**Valida: Requirement 16.3**
+
+**Property 26: Invalidación del access token tras logout**
+Para cualquier access token válido con JTI `J`, tras invocar `/auth/logout`, cualquier petición autenticada con ese mismo token debe recibir HTTP 401, aunque el token no haya expirado.
+**Valida: Requirement 16.5, 16.6**
+
+**Property 27: Expiración configurable con cota máxima**
+Para cualquier valor de `jwt.expiration` > 900 000 ms, la aplicación no debe arrancar y debe lanzar `IllegalStateException`.
+**Valida: Requirement 18.1**
+
+---
+
+## 18. Forzar HTTPS y Proteger Claves PEM
+
+### Cambios en `SecurityConfig`
+
+En el perfil `prod`, agregar redirección HTTP → HTTPS:
+
+```java
+// Solo cuando spring.profiles.active=prod
+@Profile("prod")
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http
+        // ... configuración existente ...
+        .requiresChannel(channel ->
+            channel.anyRequest().requiresSecure()
+        );
+    return http.build();
+}
+```
+
+> **Decisión de diseño**: Se usa `@Profile("prod")` en un segundo bean de `SecurityFilterChain` que extiende la configuración base, o se condiciona internamente con `Environment.acceptsProfiles`. Esto evita afectar el entorno de desarrollo donde HTTPS no está configurado localmente.
+
+### Cambios en `JwtService`
+
+Agregar validación de tamaño de clave en `@PostConstruct`:
+
+```java
+@PostConstruct
+void loadKeys() throws Exception {
+    privateKey = readPrivateKey(privateKeyResource);
+    publicKey = readPublicKey(publicKeyResource);
+
+    // Validar tamaño mínimo de clave en producción
+    int keySize = ((RSAPublicKey) publicKey).getModulus().bitLength();
+    if (environment.acceptsProfiles(Profiles.of("prod")) && keySize < 2048) {
+        throw new IllegalStateException(
+            "La clave RSA debe tener al menos 2048 bits en producción. Tamaño actual: " + keySize);
+    }
+
+    // Validar cota máxima de expiración
+    if (expiration > 900_000L) {
+        throw new IllegalStateException(
+            "jwt.expiration no puede superar 15 minutos (900000 ms). Valor configurado: " + expiration);
+    }
+}
+```
+
+### Cambios en `.gitignore`
+
+Verificar que las siguientes entradas existen; agregarlas si no están:
+
+```
+# Claves privadas RSA
+*.pem
+private_key.pem
+```
+
+### Cambios en `.env.example`
+
+Actualizar el ejemplo de CORS para apuntar a HTTPS:
+
+```
+# CORS — usar HTTPS en producción
+CORS_ALLOWED_ORIGINS=https://tu-dominio.com
+```
+
+### Validación CORS por perfil
+
+En `SecurityConfig.corsConfigurationSource()`, filtrar orígenes inseguros en prod:
+
+```java
+@Bean
+public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
+    List<String> origins = allowedOrigins;
+    if (environment.acceptsProfiles(Profiles.of("prod"))) {
+        origins = allowedOrigins.stream()
+            .filter(o -> o.startsWith("https://"))
+            .collect(Collectors.toList());
+    }
+    configuration.setAllowedOrigins(origins);
+    // ... resto de la configuración ...
+}
+```
+
+---
+
+## 19. Integración con Wompi — Diseño Técnico
+
+### Overview
+
+La integración con Wompi introduce tres nuevos componentes principales: `WompiService` (cliente HTTP a la API de Wompi), `WompiWebhookService` (procesador de notificaciones asíncronas) y `WompiConfig` (configuración de credenciales). La `CompraEntity` se extiende con el campo `wompiTransaccionId` para rastrear el ID de transacción externo.
+
+```mermaid
+graph TD
+    subgraph HTTP Layer
+        CC[CompraController]
+        WC[WompiWebhookController]
+        PC[PagoEstadoController]
+    end
+
+    subgraph Service Layer
+        CS[CompraService]
+        WS[WompiService]
+        WWS[WompiWebhookService]
+    end
+
+    subgraph Infraestructura
+        HC[RestClient / HttpClient]
+        IS[IdempotencyStore]
+        CFG[WompiConfig]
+    end
+
+    subgraph DB
+        CR[CompraRepository]
+        PG[(PostgreSQL)]
+    end
+
+    CC -->|iniciar pago| CS
+    CS -->|crearTransaccion| WS
+    WS -->|POST /transactions| HC
+    HC -->|Wompi API| WompiAPI[(Wompi API)]
+
+    WC -->|evento webhook| WWS
+    WWS -->|verificar firma| CFG
+    WWS -->|actualizar compra| CR
+    WWS -->|idempotencia evento| IS
+
+    PC -->|consultar estado| WS
+    WS -->|GET /transactions/:id| HC
+
+    CS --> CR
+    CR --> PG
+```
+
+### Componentes nuevos
+
+#### `WompiConfig.java`
+
+```java
+@Configuration
+@Validated
+public class WompiConfig {
+
+    @Value("${wompi.public-key}")
+    private String publicKey;
+
+    @Value("${wompi.private-key}")
+    private String privateKey;
+
+    @Value("${wompi.events-key}")
+    private String eventsKey;
+
+    @Value("${wompi.integrity-key}")
+    private String integrityKey;
+
+    @Value("${wompi.base-url:https://sandbox.wompi.co/v1}")
+    private String baseUrl;
+
+    @PostConstruct
+    public void validate() {
+        if (publicKey == null || publicKey.isBlank() ||
+            privateKey == null || privateKey.isBlank() ||
+            eventsKey == null || eventsKey.isBlank() ||
+            integrityKey == null || integrityKey.isBlank()) {
+            throw new IllegalStateException("Las credenciales de Wompi no están configuradas");
+        }
+    }
+    // getters...
+}
+```
+
+#### `WompiService.java`
+
+Cliente HTTP a la API de Wompi. Expone tres métodos principales:
+
+```java
+@Service
+public class WompiService {
+
+    private final WompiConfig wompiConfig;
+    private final RestClient restClient;  // Spring 6 RestClient o HttpClient con timeout 5s/15s
+
+    // Crear transacción en Wompi
+    public WompiTransaccionResponseDTO crearTransaccion(WompiTransaccionRequestDTO request) { ... }
+
+    // Consultar estado de transacción
+    public WompiTransaccionResponseDTO consultarTransaccion(String wompiTransaccionId) { ... }
+
+    // Calcular firma de integridad para el widget de Wompi
+    public String calcularFirmaIntegridad(String referencia, long amountInCents, String currency) { ... }
+}
+```
+
+**DTOs Wompi:**
+
+| DTO | Campos clave |
+|---|---|
+| `WompiTransaccionRequestDTO` | `amount_in_cents`, `currency`, `customer_email`, `reference`, `payment_method`, `signature.integrity` |
+| `WompiTransaccionResponseDTO` | `id`, `status`, `reference`, `amount_in_cents`, `payment_method_type`, `async_payment_url` |
+| `WompiPagoEstadoResponseDTO` | `compraId`, `numeroCompra`, `estadoCompra`, `wompiTransaccionId`, `estadoWompi`, `fechaActualizacion` |
+
+#### `WompiWebhookController.java` y `WompiWebhookService.java`
+
+El controller recibe el webhook y delega al service. El service verifica la firma y procesa el evento:
+
+```java
+@RestController
+@RequestMapping("/pagos/wompi")
+public class WompiWebhookController {
+
+    @PostMapping("/webhook")
+    public ResponseEntity<Void> handleWebhook(
+            @RequestHeader("x-event-checksum") String checksum,
+            @RequestBody String payload) {
+        wompiWebhookService.procesarEvento(payload, checksum);
+        return ResponseEntity.ok().build();  // siempre 200 si firma válida
+    }
+}
+```
+
+```java
+@Service
+public class WompiWebhookService {
+
+    public void procesarEvento(String payload, String checksum) {
+        // 1. Verificar firma SHA256(id + timestamp + eventsKey)
+        // 2. Verificar idempotencia con IdempotencyStore (id_evento como clave)
+        // 3. Procesar según status: APPROVED → ACEPTADO, DECLINED/VOIDED → CANCELADO + restaurar stock
+    }
+}
+```
+
+### Modificaciones a componentes existentes
+
+#### `CompraEntity.java`
+
+Agregar campo para rastrear el ID de transacción Wompi:
+
+```java
+@Column(name = "wompi_transaccion_id", length = 50, nullable = true)
+private String wompiTransaccionId;
+```
+
+**Script DDL:**
+
+```sql
+ALTER TABLE compra
+    ADD COLUMN IF NOT EXISTS wompi_transaccion_id VARCHAR(50) NULL;
+```
+
+#### `CompraService.realizarCompra`
+
+Después de crear la compra y antes de retornar, invocar `WompiService.crearTransaccion`:
+
+1. Construir `WompiTransaccionRequestDTO` con el monto en centavos, referencia = `numeroCompra`, email del usuario y el `payment_method` según el tipo seleccionado.
+2. Llamar `wompiService.crearTransaccion(request)`.
+3. Según `status` de la respuesta:
+   - `APPROVED` → estado `ACEPTADO`, guardar `wompiTransaccionId`
+   - `PENDING` → estado `PENDIENTE`, guardar `wompiTransaccionId`
+   - `DECLINED` / `ERROR` → rollback (lanzar `BusinessRuleException`)
+4. Guardar la `CompraEntity` actualizada.
+
+#### `CompraRequestDTO`
+
+Agregar campos opcionales para el pago con Wompi:
+
+```java
+private String wompiTipoPago;    // "BANCOLOMBIA_TRANSFER", "NEQUI", "CARD"
+private String wompiCardToken;   // solo cuando wompiTipoPago = "CARD"
+private String wompiNequiPhone;  // solo cuando wompiTipoPago = "NEQUI"
+private Integer cuotas = 1;      // solo cuando wompiTipoPago = "CARD" (1–36)
+```
+
+### Configuración en `application.properties`
+
+```properties
+# Wompi — credenciales desde variables de entorno
+wompi.public-key=${WOMPI_PUBLIC_KEY}
+wompi.private-key=${WOMPI_PRIVATE_KEY}
+wompi.events-key=${WOMPI_EVENTS_KEY}
+wompi.integrity-key=${WOMPI_INTEGRITY_KEY}
+
+# Wompi — URL base (sandbox para dev, producción para prod)
+wompi.base-url=https://sandbox.wompi.co/v1
+
+# Wompi — timeouts HTTP
+wompi.connect-timeout-seconds=5
+wompi.read-timeout-seconds=15
+```
+
+### Configuración en `SecurityConfig`
+
+El endpoint del webhook de Wompi debe ser público (sin autenticación JWT):
+
+```java
+.requestMatchers(HttpMethod.POST, "/pagos/wompi/webhook").permitAll()
+.requestMatchers(HttpMethod.GET, "/compras/{compraId}/pago/estado").authenticated()
+```
+
+### Propiedades de corrección (Wompi)
+
+**Property 28: Solo datos de tarjeta tokenizados llegan al backend**
+Para cualquier pago con tarjeta, los campos `número`, `cvv` y `fecha de vencimiento` nunca deben estar presentes en ningún objeto Java del backend; solo el campo `wompiCardToken` (token opaco) debe llegar.
+**Valida: Requirement 21.1, 21.3**
+
+**Property 29: Verificación de firma de webhook — ningún evento sin firma válida se procesa**
+Para cualquier payload de webhook con una firma `checksum` calculada incorrectamente (modificación de cualquier campo), el `WompiWebhookService` debe retornar error sin modificar ninguna `CompraEntity`.
+**Valida: Requirement 20.2**
+
+**Property 30: Idempotencia del webhook — mismo evento no se procesa dos veces**
+Para cualquier `id_evento` E, si el webhook es recibido dos veces con el mismo E, la `CompraEntity` solo debe ser modificada una vez y el stock solo debe ser ajustado una vez.
+**Valida: Requirement 20.5**
+
+**Property 31: Credenciales Wompi obligatorias en arranque**
+Si cualquiera de las cuatro propiedades de Wompi es nula o vacía, la aplicación debe lanzar `IllegalStateException` durante el `@PostConstruct` de `WompiConfig` y no arrancar.
+**Valida: Requirement 22.5**
+
+### Datos de prueba (Sandbox Wompi)
+
+Para el perfil `dev` usar los valores del sandbox de Wompi:
+
+| Tipo de pago | Campo de prueba |
+|---|---|
+| `BANCOLOMBIA_TRANSFER` | `sandbox_status: "APPROVED"` o `"DECLINED"` para simular resultados |
+| `NEQUI` | Teléfono `3991111111` simula aprobación; `3992222222` simula rechazo |
+| `CARD` tokenizada | Usar `Wompi.js` con tarjeta de prueba `4242424242424242`, CVV `123`, cualquier fecha futura |
+
+> Las llaves de sandbox se obtienen del panel de Wompi en [comercios.wompi.co](https://comercios.wompi.co) → sección Desarrollador.

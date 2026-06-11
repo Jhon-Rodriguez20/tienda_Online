@@ -341,3 +341,163 @@ Este documento describe los requisitos para cuatro mejoras técnicas en la tiend
 6. THE `UsuarioCodigoVerificacionEntity` SHALL declarar el campo `codigoVerificado` como columna persistida con nombre `codigo_verificado`, tipo booleano no nulo, con valor por defecto `false` a nivel de entidad JPA.
 
 7. WHEN un atacante invoca `POST /usuario/recuperar/cambiar-contrasena` sin haber pasado por `POST /usuario/recuperar/verificar`, THE sistema SHALL retornar una respuesta de error que no revele información sobre el estado interno del código de verificación (si existe o no), más allá del mensaje de que el proceso de recuperación no está activo o no fue verificado.
+
+---
+
+### Requirement 16: Refresh tokens y revocación de sesiones JWT
+
+**User Story:** Como usuario, quiero que cuando mi token de acceso expire pueda renovar mi sesión con un refresh token de larga duración sin tener que volver a ingresar mis credenciales, y quiero que al cerrar sesión mi token quede inmediatamente invalidado aunque no haya expirado.
+
+#### Acceptance Criteria
+
+1. WHEN el usuario inicia sesión exitosamente en `POST /auth/login`, THE `AuthService` SHALL generar dos tokens distintos: un access token JWT firmado con RS256 con expiración máxima de 15 minutos, y un refresh token opaco (UUID v4) con expiración de 7 días; ambos SHALL ser retornados en la respuesta de login.
+
+2. THE sistema SHALL persistir el refresh token en una tabla `refresh_token` de PostgreSQL con los campos: `id` (UUID PK), `token` (VARCHAR UNIQUE), `id_usuario` (FK a `usuario`), `fecha_expiracion` (TIMESTAMP), `revocado` (BOOLEAN DEFAULT FALSE), `fecha_creacion` (TIMESTAMP).
+
+3. WHEN el cliente invoca `POST /auth/refresh` con un refresh token válido en el body o header, THE `AuthService` SHALL verificar que el token existe en la base de datos, que `revocado = false` y que `fecha_expiracion` es posterior a `now()`; si todas las condiciones se cumplen, SHALL emitir un nuevo access token JWT y un nuevo refresh token (rotación), revocar el refresh token anterior, y retornar los nuevos tokens.
+
+4. IF el refresh token no existe, está revocado o ha expirado al invocar `POST /auth/refresh`, THEN THE `AuthService` SHALL retornar HTTP 401 con mensaje `"Refresh token inválido o expirado"` sin revelar cuál condición falló.
+
+5. WHEN el usuario invoca `POST /auth/logout` con su access token vigente, THE `AuthService` SHALL revocar el refresh token asociado al usuario (`revocado = true`) y agregar el `jti` del access token a una blacklist en memoria (Caffeine, TTL igual al tiempo de expiración restante del token) para que el access token sea rechazado aunque no haya expirado.
+
+6. WHEN el `JwtAuthenticationFilter` valida un access token, THE filtro SHALL consultar la blacklist en memoria y rechazar con HTTP 401 cualquier token cuyo `jti` esté en la lista, independientemente de si la firma y la expiración son válidas.
+
+7. THE access token SHALL tener una expiración máxima de 15 minutos (configurable vía `jwt.expiration` con un valor por defecto de `900000` ms); cualquier valor en `application.properties` superior a 15 minutos SHALL ser rechazado en el arranque de la aplicación con un error de configuración explícito.
+
+8. IF un usuario con refresh token activo inicia sesión nuevamente (emitir nuevo par de tokens), THEN THE `AuthService` SHALL revocar todos los refresh tokens anteriores del usuario antes de crear el nuevo, evitando acumulación de tokens activos por usuario.
+
+---
+
+### Requirement 17: Forzar HTTPS y proteger las claves PEM
+
+**User Story:** Como operador del sistema, quiero que toda la comunicación con la API ocurra exclusivamente por HTTPS y que los archivos de clave privada RSA nunca queden expuestos en el repositorio de código ni en rutas accesibles por el servidor web.
+
+#### Acceptance Criteria
+
+1. WHERE la aplicación se ejecuta en un perfil de producción (`spring.profiles.active=prod`), THE `SecurityConfig` SHALL agregar `.requiresChannel(channel -> channel.anyRequest().requiresSecure())` para que cualquier petición HTTP sin TLS sea redirigida automáticamente a HTTPS con código HTTP 301.
+
+2. THE archivo `private_key.pem` SHALL estar listado explícitamente en `.gitignore` para que nunca sea comprometido en el repositorio de código; se verificará que la entrada `*.pem` o `private_key.pem` existe en `.gitignore`.
+
+3. THE propiedad `jwt.private-key-location` SHALL soportar rutas externas al classpath (prefijo `file:`) en producción, de modo que el archivo `private_key.pem` pueda almacenarse fuera del directorio de la aplicación y con permisos de lectura restringidos al usuario del proceso.
+
+4. WHEN la aplicación arranca con el perfil `prod`, THE `JwtService` SHALL verificar que el tamaño de la clave RSA es de al menos 2048 bits; si la clave tiene menos bits, SHALL lanzar una excepción en `@PostConstruct` con el mensaje `"La clave RSA debe tener al menos 2048 bits en producción"` e impedir el arranque.
+
+5. THE header CORS `Access-Control-Allow-Origin` SHALL permitir únicamente orígenes con protocolo `https://` en producción; cualquier origen que empiece con `http://` (sin TLS) SHALL ser rechazado con HTTP 403 cuando el perfil activo sea `prod`.
+
+6. THE archivo `.env.example` SHALL mostrar `CORS_ALLOWED_ORIGINS=https://tu-dominio.com` como valor de ejemplo para el origen CORS en producción, eliminando la referencia a `http://localhost:8080` que podría inducir a configurar orígenes inseguros en producción.
+
+---
+
+### Requirement 18: Validación de expiración configurable del access token
+
+**User Story:** Como desarrollador, quiero que el tiempo de expiración del access token tenga un límite máximo configurable y verificado en el arranque, de modo que un error de configuración no genere tokens de larga duración que amplíen la ventana de ataque.
+
+#### Acceptance Criteria
+
+1. THE `JwtService` SHALL leer la propiedad `jwt.expiration` como milisegundos y validar en `@PostConstruct` que el valor no supere los 900 000 ms (15 minutos); si el valor configurado es mayor, SHALL lanzar una `IllegalStateException` con el mensaje `"jwt.expiration no puede superar 15 minutos (900000 ms)"` para que la aplicación no arranque con tokens de larga duración.
+
+2. THE `application.properties` SHALL declarar `jwt.expiration=900000` (15 minutos) como valor por defecto explícito, con un comentario que indique el máximo permitido.
+
+3. WHEN el `JwtService` genera un access token, THE token SHALL incluir el claim `jti` con un UUID v4 único por token (ya implementado), y el claim `exp` SHALL corresponder exactamente a `iat + jwt.expiration` milisegundos, sin tolerancia adicional más allá de los 30 segundos de `clockSkewSeconds` definidos en el parser.
+
+4. IF la propiedad `jwt.expiration` no está definida en `application.properties`, THEN THE `JwtService` SHALL usar un valor por defecto de 900 000 ms (15 minutos) mediante la anotación `@Value("${jwt.expiration:900000}")`, garantizando que la aplicación arranque de forma segura sin configuración explícita.
+
+---
+
+### Requirement 19: Integración con la pasarela de pagos Wompi
+
+**User Story:** Como cliente, quiero poder pagar mis compras usando Bancolombia Transfer, Nequi o tarjeta débito/crédito Mastercard a través de Wompi, de modo que el sistema procese el pago de forma segura y me confirme el resultado.
+
+#### Acceptance Criteria
+
+1. WHEN el cliente confirma una compra con `POST /compras/realizar`, THE `CompraService` SHALL iniciar una transacción en Wompi usando las credenciales de la llave pública configurada (`wompi.public-key`), enviando el monto en centavos, la referencia única de la compra (`numeroCompra`) y la moneda `COP`.
+
+2. THE sistema SHALL soportar exactamente tres métodos de pago de Wompi: `BANCOLOMBIA_TRANSFER`, `NEQUI` y `CARD`; cualquier otro valor SHALL ser rechazado con HTTP 400 antes de llamar a la API de Wompi.
+
+3. WHEN el cliente selecciona `BANCOLOMBIA_TRANSFER`, THE `WompiService` SHALL construir el objeto `payment_method` con `type: "BANCOLOMBIA_TRANSFER"` y el `sandbox_status` o datos reales según el perfil activo, y retornar al cliente la URL de redirección (`async_payment_url`) para completar el pago en Bancolombia.
+
+4. WHEN el cliente selecciona `NEQUI`, THE `WompiService` SHALL construir el objeto `payment_method` con `type: "NEQUI"` y el número de teléfono celular del cliente, y enviar la notificación push de pago a Nequi.
+
+5. WHEN el cliente selecciona `CARD`, THE `WompiService` SHALL construir el objeto `payment_method` con `type: "CARD"` usando el `token` de tarjeta previamente tokenizado por Wompi.js en el frontend, sin que los datos de la tarjeta pasen por el backend del servidor.
+
+6. THE `WompiService` SHALL usar las propiedades `wompi.public-key` y `wompi.private-key` inyectadas vía `@Value` desde `application.properties` (o variables de entorno), con los valores del sandbox para el perfil `dev` y los valores de producción para el perfil `prod`.
+
+7. WHEN Wompi retorna una transacción con `status: "APPROVED"`, THE `CompraService` SHALL actualizar el estado de la `CompraEntity` a `ACEPTADO` y almacenar el `id` de la transacción Wompi en el campo `wompiTransaccionId` de `CompraEntity`.
+
+8. WHEN Wompi retorna una transacción con `status: "DECLINED"` o `"ERROR"`, THE `CompraService` SHALL revertir la compra completa (rollback de stock) y retornar HTTP 402 con un mensaje de error que describa el motivo del rechazo proporcionado por Wompi.
+
+9. WHEN Wompi retorna una transacción con `status: "PENDING"`, THE `CompraService` SHALL guardar la compra en estado `PENDIENTE` y retornar al cliente el `id` de la transacción Wompi para que pueda consultar el estado posteriormente.
+
+---
+
+### Requirement 20: Webhook de Wompi para actualización de estado de pago
+
+**User Story:** Como operador del sistema, quiero que cuando Wompi notifique el resultado de un pago asíncrono (Bancolombia Transfer, Nequi) a través de su webhook, el sistema actualice el estado de la compra automáticamente sin intervención manual.
+
+#### Acceptance Criteria
+
+1. THE sistema SHALL exponer el endpoint `POST /pagos/wompi/webhook` como ruta pública (sin autenticación JWT) para recibir las notificaciones de Wompi.
+
+2. WHEN Wompi envía una notificación al webhook, THE `WompiWebhookService` SHALL verificar la autenticidad de la notificación comprobando la firma `x-event-checksum` del header HTTP contra el hash `SHA256(id_evento + timestamp + wompi.events-key)` calculado con la llave de eventos (`wompi.events-key`); si la firma no coincide, SHALL retornar HTTP 401 sin procesar el evento.
+
+3. WHEN la firma del webhook es válida y el evento es `transaction.updated` con `status: "APPROVED"`, THE `WompiWebhookService` SHALL buscar la `CompraEntity` por el campo `wompiTransaccionId`, actualizar su estado a `ACEPTADO` y persistir el cambio en una transacción `@Transactional`.
+
+4. WHEN la firma del webhook es válida y el evento es `transaction.updated` con `status: "DECLINED"` o `"VOIDED"`, THE `WompiWebhookService` SHALL buscar la `CompraEntity` por `wompiTransaccionId`, restaurar el stock de todos los productos del detalle (usando `findByIdWithLock`) y actualizar el estado a `CANCELADO`, todo en una única transacción `REPEATABLE_READ`.
+
+5. IF el webhook recibe un evento duplicado (mismo `id_evento` ya procesado), THEN THE `WompiWebhookService` SHALL retornar HTTP 200 sin re-procesar el evento, usando el `IdempotencyStore` con el `id_evento` como clave.
+
+6. THE endpoint del webhook SHALL retornar HTTP 200 siempre que la firma sea válida, independientemente del resultado del procesamiento interno, para evitar que Wompi reintente la notificación indefinidamente por errores internos del sistema.
+
+---
+
+### Requirement 21: Tokenización segura de tarjetas con Wompi.js
+
+**User Story:** Como cliente, quiero poder pagar con tarjeta débito o crédito sin que mis datos de tarjeta sean enviados al servidor de la tienda, garantizando que solo el token seguro de Wompi sea procesado por el backend.
+
+#### Acceptance Criteria
+
+1. THE backend SHALL nunca recibir, almacenar ni registrar en logs los datos sensibles de la tarjeta (número, CVV, fecha de vencimiento); únicamente SHALL aceptar el `token` de tarjeta generado por Wompi.js en el frontend.
+
+2. WHEN el cliente envía `POST /compras/realizar` con método de pago `CARD`, THE `CompraRequestDTO` SHALL incluir el campo `wompiCardToken` (String, obligatorio si el método es `CARD`) y el campo `cuotas` (Integer, valor entre 1 y 36, por defecto 1).
+
+3. WHEN el `WompiService` construye la transacción de tipo `CARD`, THE servicio SHALL incluir en `payment_method` los campos `token` (el `wompiCardToken` del cliente) e `installments` (el valor de `cuotas`), y nunca agregar datos crudos de tarjeta.
+
+4. IF el `wompiCardToken` es nulo o vacío cuando el método de pago es `CARD`, THEN THE `CompraController` SHALL retornar HTTP 400 con el mensaje `"El token de tarjeta es obligatorio para pagos con tarjeta"` antes de llamar al servicio.
+
+5. THE `WompiService` SHALL configurar la llamada a la API de Wompi con un timeout de conexión de 5 segundos y un timeout de lectura de 15 segundos, lanzando `WompiTimeoutException` si se supera cualquiera de los dos tiempos, lo que desencadenará el rollback de la compra.
+
+---
+
+### Requirement 22: Configuración segura de credenciales Wompi
+
+**User Story:** Como desarrollador, quiero que las credenciales de Wompi estén externalizadas en variables de entorno y nunca sean incluidas en el repositorio de código, de modo que el sandbox y la producción usen llaves distintas sin riesgo de exposición.
+
+#### Acceptance Criteria
+
+1. THE aplicación SHALL leer las cuatro credenciales de Wompi exclusivamente desde propiedades de entorno: `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_EVENTS_KEY` e `WOMPI_INTEGRITY_KEY`; ninguna de estas llaves SHALL tener valor hardcodeado en el código fuente.
+
+2. THE `application.properties` SHALL declarar las cuatro propiedades de Wompi como referencias a variables de entorno sin valores por defecto: `wompi.public-key=${WOMPI_PUBLIC_KEY}`, `wompi.private-key=${WOMPI_PRIVATE_KEY}`, `wompi.events-key=${WOMPI_EVENTS_KEY}` e `wompi.integrity-key=${WOMPI_INTEGRITY_KEY}`.
+
+3. THE `.env.example` SHALL incluir las cuatro variables de Wompi con valores de placeholder que indiquen claramente que deben reemplazarse: `WOMPI_PUBLIC_KEY=pub_stagtest_...`, `WOMPI_PRIVATE_KEY=prv_stagtest_...`, etc.
+
+4. THE `.gitignore` SHALL confirmar que el archivo `.env` (que contiene las llaves reales) está excluido del control de versiones.
+
+5. WHEN la aplicación arranca y alguna de las cuatro propiedades de Wompi es nula o vacía, THE `WompiConfig` SHALL lanzar una `IllegalStateException` en `@PostConstruct` con el mensaje `"Las credenciales de Wompi no están configuradas"` para evitar que la aplicación funcione sin llaves válidas.
+
+---
+
+### Requirement 23: Consulta de estado de transacción Wompi
+
+**User Story:** Como cliente, quiero poder consultar el estado actual de una transacción Wompi para saber si mi pago asíncrono (Bancolombia Transfer o Nequi) fue procesado, sin tener que esperar una notificación push.
+
+#### Acceptance Criteria
+
+1. THE sistema SHALL exponer el endpoint `GET /compras/{compraId}/pago/estado` (autenticado, rol `CLIENTE` o `ADMIN`) que retorne el estado actual de la transacción Wompi asociada a la compra.
+
+2. WHEN el `WompiService` consulta el estado de una transacción, THE servicio SHALL llamar a `GET https://sandbox.wompi.co/v1/transactions/{wompiTransaccionId}` (o el endpoint de producción según el perfil), usando la llave privada como bearer token.
+
+3. WHEN la transacción consultada tiene `status: "APPROVED"` y la `CompraEntity` aún está en `PENDIENTE`, THE `WompiService` SHALL actualizar el estado de la compra a `ACEPTADO` como efecto secundario de la consulta y retornar el nuevo estado al cliente.
+
+4. THE respuesta del endpoint SHALL incluir los campos: `compraId`, `numeroCompra`, `estadoCompra`, `wompiTransaccionId`, `estadoWompi` y `fechaActualizacion`.
+
+5. IF la `CompraEntity` no tiene `wompiTransaccionId` (pago no iniciado), THEN THE `WompiService` SHALL retornar HTTP 404 con el mensaje `"No existe una transacción Wompi asociada a esta compra"`.

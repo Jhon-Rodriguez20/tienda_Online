@@ -2,10 +2,13 @@ package com.fesc.tiendaOnline.config;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -29,16 +32,19 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final UserDetailsService userDetailsService;
+    private final Environment environment;
 
     @Value("${app.cors.allowed-origins:http://localhost:8080}")
     private List<String> allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           RateLimitingFilter rateLimitingFilter,
-                          UserDetailsService userDetailsService) {
+                          UserDetailsService userDetailsService,
+                          Environment environment) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.rateLimitingFilter = rateLimitingFilter;
         this.userDetailsService = userDetailsService;
+        this.environment = environment;
     }
 
     @Bean
@@ -57,6 +63,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Auth
                 .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
                 // Registro y verificación de cuenta
                 .requestMatchers(HttpMethod.POST, "/usuario/registro").permitAll()
                 .requestMatchers(HttpMethod.POST, "/usuario/verificar").permitAll()
@@ -69,7 +76,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/productos", "/productos/{idProducto}").permitAll()
                 .requestMatchers(HttpMethod.GET, "/productos/buscar", "/productos/buscar/nombre").permitAll()
                 .requestMatchers(HttpMethod.POST, "/productos/buscar/avanzado").permitAll()
-                // Productos: solo ADMIN
+                // Productos Categorias: solo ADMIN
                 .requestMatchers(HttpMethod.GET, "/productos/categorias").hasRole("ADMIN")
                 // Archivos estáticos
                 .requestMatchers("/uploads/**", "/images/**").permitAll()
@@ -92,13 +99,26 @@ public class SecurityConfig {
             .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            http.redirectToHttps(redirect -> redirect.requestMatchers(r -> true));
+        }
+
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(allowedOrigins);
+        
+        // REDIRECCIONAR DE HTTP A HTTPS PARA PRODUCCION
+        List<String> originsToUse = allowedOrigins;
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            originsToUse = allowedOrigins.stream()
+                    .filter(origin -> origin.startsWith("https://"))
+                    .collect(Collectors.toList());
+        }
+
+        configuration.setAllowedOrigins(originsToUse);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
             "Authorization", "Content-Type", "Accept", "X-Requested-With",

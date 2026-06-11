@@ -19,7 +19,6 @@ public class MetodoPagoDataLoader implements CommandLineRunner {
     public void run(String... args) throws Exception {
         crearMetodoPagoSiNoExiste("Bancolombia");
         crearMetodoPagoSiNoExiste("Nequi");
-        crearMetodoPagoSiNoExiste("Daviplata");
         crearMetodoPagoSiNoExiste("Tarjeta Débito o Crédito");
     }
     

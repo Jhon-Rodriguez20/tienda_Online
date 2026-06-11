@@ -303,6 +303,236 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
 
 ---
 
+- [x] 18. Implementar refresh tokens y revocación de sesiones JWT
+  - [x] 18.1 Crear entidad `RefreshTokenEntity` y repositorio `RefreshTokenRepository`
+    - Crear `RefreshTokenEntity.java` en el paquete `model.entity` con campos: `id` (UUID PK), `token` (VARCHAR UNIQUE), `usuario` (ManyToOne LAZY), `fechaExpiracion`, `revocado` (boolean, default false), `fechaCreacion`
+    - Crear `RefreshTokenRepository.java` con métodos `findByToken`, `revokeAllByUsuarioIdUsuario` (@Modifying), y `deleteByFechaExpiracionBefore`
+    - Aplicar script DDL: `CREATE TABLE refresh_token (...)` con índices en `token` e `id_usuario`
+    - _Requirements: 16.2_
+
+  - [x] 18.2 Crear `JwtBlacklist` como componente Caffeine para invalidación de JTI
+    - Crear `JwtBlacklist.java` en el paquete `service` como `@Component`
+    - Usar `Caffeine.newBuilder().maximumSize(maxSize).expireAfterWrite(15, MINUTES).build()` para la cache de JTIs revocados
+    - Exponer métodos `add(String jti)` e `isBlacklisted(String jti)`
+    - Inyectar tamaño máximo vía `@Value("${jwt.blacklist.max-size:100000}")`
+    - _Requirements: 16.5, 16.6_
+
+  - [x] 18.3 Modificar `JwtService` para validar cota de expiración y verificar blacklist en arranque
+    - En `@PostConstruct`, agregar validación: si `expiration > 900_000L`, lanzar `IllegalStateException("jwt.expiration no puede superar 15 minutos (900000 ms)")`
+    - Agregar validación de tamaño de clave RSA en perfil `prod`: si `modulusBitLength < 2048`, lanzar `IllegalStateException`
+    - Agregar default `@Value("${jwt.expiration:900000}")` para arranque seguro sin configuración explícita
+    - _Requirements: 18.1, 18.2, 18.4, 17.4_
+
+  - [x] 18.4 Modificar `JwtAuthenticationFilter` para consultar la blacklist de JTI
+    - Inyectar `JwtBlacklist` en el filtro
+    - Tras extraer el `jti` del token, llamar `jwtBlacklist.isBlacklisted(jti)`; si es true, limpiar contexto y retornar HTTP 401
+    - _Requirements: 16.6_
+
+  - [x] 18.5 Modificar `AuthService` para emitir par access+refresh token en login
+    - Generar refresh token como `UUID.randomUUID().toString()`
+    - Persistir `RefreshTokenEntity` con `fechaExpiracion = now() + 7 días`
+    - Revocar todos los refresh tokens anteriores del usuario antes de crear el nuevo
+    - Agregar `refreshToken` al `LoginResponseDTO`
+    - _Requirements: 16.1, 16.2, 16.8_
+
+  - [x] 18.6 Implementar `POST /auth/refresh` en `AuthController` y `AuthService`
+    - Agregar método `refreshAccessToken(String refreshToken)` en `AuthService`: buscar en BD, validar no revocado y no expirado, revocar el anterior, crear nuevo par, retornar
+    - Agregar endpoint `POST /auth/refresh` en `AuthController` (público, sin Bearer token)
+    - Si el refresh token es inválido: retornar HTTP 401 con mensaje genérico
+    - _Requirements: 16.3, 16.4_
+
+  - [x] 18.7 Implementar `POST /auth/logout` en `AuthController` y `AuthService`
+    - Agregar método `logout(String jti, UUID idUsuario)` en `AuthService`: `jwtBlacklist.add(jti)` + `refreshTokenRepository.revokeAllByUsuarioIdUsuario(idUsuario)`
+    - Agregar endpoint `POST /auth/logout` en `AuthController` (requiere Bearer token)
+    - Registrar `/auth/logout` como ruta autenticada en `SecurityConfig`
+    - Retornar HTTP 204 No Content
+    - _Requirements: 16.5_
+
+  - [x] 18.8 Escribir property tests para refresh tokens y revocación
+    - **Property 25**: Para cualquier refresh token válido, tras `/auth/refresh`, el token anterior está revocado y se emite un nuevo par
+    - **Property 26**: Para cualquier access token válido con JTI `J`, tras logout, peticiones con ese token reciben HTTP 401
+    - **Property 27**: Para cualquier valor `jwt.expiration > 900 000`, la aplicación no debe arrancar
+    - Usar `@Property` de jqwik en `JwtSecurityPropertyTest.java`
+    - _Requirements: 16.3, 16.5, 16.6, 18.1_
+
+---
+
+- [x] 19. Forzar HTTPS y proteger claves PEM
+  - [x] 19.1 Agregar redirección HTTP → HTTPS en `SecurityConfig` para perfil `prod`
+    - Condicionar `.requiresChannel(channel -> channel.anyRequest().requiresSecure())` al perfil `prod` usando `Environment.acceptsProfiles`
+    - _Requirements: 17.1_
+
+  - [x] 19.2 Filtrar orígenes CORS inseguros en perfil `prod`
+    - En `corsConfigurationSource()`, cuando el perfil sea `prod`, filtrar la lista `allowedOrigins` para excluir cualquier origen que no empiece con `https://`
+    - _Requirements: 17.5_
+
+  - [x] 19.3 Verificar y actualizar `.gitignore` y `.env.example`
+    - Confirmar que `*.pem` o `private_key.pem` están listados en `.gitignore`; agregarlos si no están
+    - Actualizar el valor de ejemplo `CORS_ALLOWED_ORIGINS` en `.env.example` a `https://tu-dominio.com`
+    - Agregar comentario en `.env.example` indicando que en producción se debe usar HTTPS
+    - _Requirements: 17.2, 17.6_
+
+  - [x] 19.4 Agregar propiedad `jwt.expiration=900000` con comentario en `application.properties`
+    - Agregar o actualizar la propiedad con el comentario: `# Máximo permitido: 900000 ms (15 minutos)`
+    - _Requirements: 18.2_
+
+---
+
+---
+
+- [ ] 20. Configuración base de Wompi
+  - [ ] 20.1 Agregar credenciales Wompi en `application.properties` y `.env.example`
+    - Agregar `wompi.public-key=${WOMPI_PUBLIC_KEY}`, `wompi.private-key=${WOMPI_PRIVATE_KEY}`, `wompi.events-key=${WOMPI_EVENTS_KEY}`, `wompi.integrity-key=${WOMPI_INTEGRITY_KEY}` en `application.properties`
+    - Agregar `wompi.base-url=https://sandbox.wompi.co/v1`, `wompi.connect-timeout-seconds=5`, `wompi.read-timeout-seconds=15`
+    - Agregar las cuatro variables de placeholder en `.env.example` (`WOMPI_PUBLIC_KEY=pub_stagtest_...`)
+    - Confirmar que `.env` está en `.gitignore`
+    - _Requirements: 22.1, 22.2, 22.3, 22.4_
+
+  - [ ] 20.2 Crear `WompiConfig.java` con validación de credenciales en `@PostConstruct`
+    - Crear clase `@Configuration` en el paquete `config` con los cuatro `@Value` de Wompi y `wompi.base-url`
+    - Implementar `@PostConstruct validate()` que lanza `IllegalStateException("Las credenciales de Wompi no están configuradas")` si cualquier llave es nula o vacía
+    - Exponer getters para `publicKey`, `privateKey`, `eventsKey`, `integrityKey`, `baseUrl`
+    - _Requirements: 22.5_
+
+- [ ] 21. Modificar esquema de base de datos para Wompi
+  - [ ] 21.1 Agregar columna `wompi_transaccion_id` en `CompraEntity` y script DDL
+    - Agregar `@Column(name = "wompi_transaccion_id", length = 50, nullable = true)` en `CompraEntity`
+    - Crear script DDL: `ALTER TABLE compra ADD COLUMN IF NOT EXISTS wompi_transaccion_id VARCHAR(50) NULL;`
+    - Agregar el ALTER al script de migración existente (`V2__add_indexes.sql`) o crear `V3__wompi.sql`
+    - _Requirements: 19.7_
+
+- [ ] 22. Implementar `WompiService` — cliente HTTP a la API de Wompi
+  - [ ] 22.1 Crear DTOs de Wompi
+    - Crear `WompiTransaccionRequestDTO` con campos: `amount_in_cents`, `currency`, `customer_email`, `reference`, `payment_method` (objeto), `signature` (objeto con campo `integrity`)
+    - Crear `WompiTransaccionResponseDTO` con campos: `id`, `status`, `reference`, `amount_in_cents`, `payment_method_type`, `async_payment_url`, `redirect_url`
+    - Crear `WompiPagoEstadoResponseDTO` con campos: `compraId`, `numeroCompra`, `estadoCompra`, `wompiTransaccionId`, `estadoWompi`, `fechaActualizacion`
+    - _Requirements: 19.1, 23.4_
+
+  - [ ] 22.2 Crear `WompiService.java` con cliente HTTP y métodos principales
+    - Crear clase `@Service` en el paquete `service`
+    - Configurar `RestClient` (Spring 6) o `HttpClient` con `connectTimeout(5s)` y `readTimeout(15s)`; lanzar `WompiTimeoutException` si se supera el timeout
+    - Implementar `crearTransaccion(WompiTransaccionRequestDTO)`: `POST {wompi.base-url}/transactions` con `Authorization: Bearer {privateKey}`, retornar `WompiTransaccionResponseDTO`
+    - Implementar `consultarTransaccion(String wompiTransaccionId)`: `GET {wompi.base-url}/transactions/{id}` con `Authorization: Bearer {privateKey}`
+    - Implementar `calcularFirmaIntegridad(String referencia, long amountInCents, String currency)`: `SHA256(referencia + amountInCents + currency + integrityKey)`
+    - _Requirements: 19.1, 19.6, 21.5, 23.2_
+
+  - [ ] 22.3 Crear `WompiTimeoutException.java`
+    - Crear excepción de negocio en el paquete `service` que extiende `RuntimeException`
+    - Lanzarla cuando se supera el timeout de conexión o lectura con Wompi
+    - _Requirements: 21.5_
+
+- [ ] 23. Modificar `CompraRequestDTO` y `CompraController` para soportar métodos de pago Wompi
+  - [ ] 23.1 Agregar campos Wompi en `CompraRequestDTO`
+    - Agregar `private String wompiTipoPago` con validación `@Pattern(regexp = "BANCOLOMBIA_TRANSFER|NEQUI|CARD")`
+    - Agregar `private String wompiCardToken` (sin validación obligatoria global; se valida condicionalmente)
+    - Agregar `private String wompiNequiPhone` (sin validación obligatoria global)
+    - Agregar `private Integer cuotas = 1` con `@Min(1) @Max(36)`
+    - _Requirements: 19.2, 21.2_
+
+  - [ ] 23.2 Agregar validación condicional en `CompraController.realizarCompra`
+    - Antes de llamar al servicio, si `wompiTipoPago == "CARD"` y `wompiCardToken` es nulo o vacío → HTTP 400 con mensaje `"El token de tarjeta es obligatorio para pagos con tarjeta"`
+    - Si `wompiTipoPago == "NEQUI"` y `wompiNequiPhone` es nulo o vacío → HTTP 400 con mensaje `"El número de teléfono es obligatorio para pagos con Nequi"`
+    - _Requirements: 19.2, 21.4_
+
+- [ ] 24. Integrar `WompiService` en `CompraService.realizarCompra`
+  - [ ] 24.1 Llamar a Wompi al finalizar la creación de la compra en `realizarCompra`
+    - Después de guardar la `CompraEntity` y antes de almacenar en `IdempotencyStore`, construir `WompiTransaccionRequestDTO`:
+      - `amount_in_cents = (long)(totalPagado * 100)`
+      - `currency = "COP"`
+      - `reference = numeroCompra`
+      - `customer_email = usuario.getEmail()`
+      - Calcular `signature.integrity = wompiService.calcularFirmaIntegridad(referencia, amountInCents, currency)`
+      - Construir `payment_method` según `wompiTipoPago`: `BANCOLOMBIA_TRANSFER`, `NEQUI` (con teléfono), o `CARD` (con token e installments)
+    - Llamar `wompiService.crearTransaccion(requestDTO)`
+    - Según `status` de la respuesta:
+      - `"APPROVED"` → `compra.setCompraEstado(ACEPTADO)`, `compra.setWompiTransaccionId(id)`
+      - `"PENDING"` → `compra.setCompraEstado(PENDIENTE)`, `compra.setWompiTransaccionId(id)`, incluir `async_payment_url` en respuesta
+      - `"DECLINED"` o `"ERROR"` → lanzar `BusinessRuleException("Pago rechazado: " + motivo)` → rollback automático de la transacción
+    - Guardar la `CompraEntity` actualizada con `compraRepository.save(compra)`
+    - _Requirements: 19.1, 19.3, 19.4, 19.7, 19.8, 19.9_
+
+  - [ ] 24.2 Manejar `WompiTimeoutException` en `realizarCompra`
+    - Capturar `WompiTimeoutException` y lanzar `BusinessRuleException("No se pudo procesar el pago: timeout de conexión con Wompi")` para desencadenar rollback
+    - _Requirements: 21.5_
+
+- [ ] 25. Implementar webhook de Wompi
+  - [ ] 25.1 Crear `WompiWebhookController.java`
+    - Crear `@RestController` en el paquete `controller` con endpoint `POST /pagos/wompi/webhook`
+    - Recibir `@RequestHeader("x-event-checksum") String checksum` y `@RequestBody String payload`
+    - Delegar a `WompiWebhookService.procesarEvento(payload, checksum)` y retornar `ResponseEntity.ok().build()`
+    - _Requirements: 20.1, 20.6_
+
+  - [ ] 25.2 Crear `WompiWebhookService.java`
+    - Crear clase `@Service` en el paquete `service`
+    - Implementar `procesarEvento(String payload, String checksum)`:
+      1. Parsear el payload JSON para extraer `id_evento`, `timestamp` y datos de la transacción
+      2. Verificar firma: `SHA256(id_evento + timestamp + eventsKey)` debe coincidir con `checksum`; si no coincide, lanzar `UnauthorizedException`
+      3. Verificar idempotencia en `IdempotencyStore` con `id_evento` como clave; si ya existe, retornar sin procesar
+      4. Según `status` del evento:
+         - `"APPROVED"` → `@Transactional` buscar compra por `wompiTransaccionId`, actualizar estado a `ACEPTADO`
+         - `"DECLINED"` o `"VOIDED"` → `@Transactional(isolation=REPEATABLE_READ)` restaurar stock con `findByIdWithLock`, actualizar estado a `CANCELADO`
+      5. Almacenar `id_evento` en `IdempotencyStore` para idempotencia futura
+    - _Requirements: 20.2, 20.3, 20.4, 20.5_
+
+  - [ ] 25.3 Registrar `/pagos/wompi/webhook` como ruta pública en `SecurityConfig`
+    - Agregar `.requestMatchers(HttpMethod.POST, "/pagos/wompi/webhook").permitAll()` en `authorizeHttpRequests`
+    - _Requirements: 20.1_
+
+- [ ] 26. Implementar consulta de estado de pago
+  - [ ] 26.1 Agregar endpoint `GET /compras/{compraId}/pago/estado` en `CompraController`
+    - Agregar `@GetMapping("/{compraId}/pago/estado")` que llame a `wompiService.consultarEstadoPago(compraId, usuarioId)`
+    - Retornar `WompiPagoEstadoResponseDTO`
+    - _Requirements: 23.1_
+
+  - [ ] 26.2 Implementar `consultarEstadoPago` en `WompiService`
+    - Buscar `CompraEntity` por `compraId`; si no tiene `wompiTransaccionId` → lanzar `NotFoundException("No existe una transacción Wompi asociada a esta compra")`
+    - Llamar `consultarTransaccion(wompiTransaccionId)`
+    - Si el status Wompi es `"APPROVED"` y la compra está en `PENDIENTE`, actualizar estado a `ACEPTADO` y guardar
+    - Construir y retornar `WompiPagoEstadoResponseDTO`
+    - _Requirements: 23.2, 23.3, 23.4, 23.5_
+
+  - [ ] 26.3 Registrar el endpoint de estado como ruta autenticada en `SecurityConfig`
+    - Agregar `.requestMatchers(HttpMethod.GET, "/compras/{compraId}/pago/estado").authenticated()` en `authorizeHttpRequests`
+    - _Requirements: 23.1_
+
+- [ ] 27. Tests para la integración con Wompi
+  - [ ] 27.1 Escribir tests unitarios para `WompiService`
+    - Test: `crearTransaccion` con `BANCOLOMBIA_TRANSFER` → construye payload correcto y retorna `async_payment_url`
+    - Test: `crearTransaccion` con `NEQUI` → construye payload con teléfono correcto
+    - Test: `crearTransaccion` con `CARD` → construye payload con `token` e `installments`, sin datos de tarjeta crudos
+    - Test: `calcularFirmaIntegridad` → hash SHA256 correcto para datos conocidos
+    - Test: timeout de conexión → lanza `WompiTimeoutException`
+    - _Requirements: 19.3, 19.4, 19.5, 21.3, 21.5_
+
+  - [ ] 27.2 Escribir tests unitarios para `WompiWebhookService`
+    - Test: firma correcta + evento APPROVED → compra actualizada a ACEPTADO
+    - Test: firma incorrecta → lanza `UnauthorizedException` sin modificar compra
+    - Test: evento duplicado (mismo `id_evento`) → no modifica compra segunda vez
+    - Test: evento DECLINED → stock restaurado + compra CANCELADO
+    - _Requirements: 20.2, 20.3, 20.4, 20.5_
+
+  - [ ] 27.3 Escribir tests unitarios para validaciones en `CompraController`
+    - Test: `wompiTipoPago = "CARD"` sin `wompiCardToken` → HTTP 400
+    - Test: `wompiTipoPago = "NEQUI"` sin `wompiNequiPhone` → HTTP 400
+    - Test: `wompiTipoPago` con valor no permitido → HTTP 400 (fallará validación `@Pattern`)
+    - _Requirements: 19.2, 21.4_
+
+  - [ ] 27.4 Escribir property tests para la integración Wompi
+    - **Property 28**: Para cualquier pago CARD, `wompiCardToken` es el único dato de tarjeta presente en el request del backend
+    - **Property 29**: Para cualquier payload de webhook con firma incorrecta, `WompiWebhookService` no modifica ninguna `CompraEntity`
+    - **Property 30**: Para cualquier `id_evento` procesado dos veces, la `CompraEntity` solo cambia estado una vez
+    - **Property 31**: Si cualquier credencial Wompi es nula/vacía, la aplicación lanza `IllegalStateException` al arrancar
+    - Usar `@Property` de jqwik en `WompiPropertyTest.java`
+    - _Requirements: 21.1, 20.2, 20.5, 22.5_
+
+- [ ] 28. Checkpoint — Verificar integración Wompi completa
+  - Verificar que el proyecto compila sin errores con las nuevas clases y dependencias
+  - Probar en Postman con las llaves de sandbox: realizar compra con BANCOLOMBIA_TRANSFER, NEQUI y CARD
+  - Verificar que el webhook recibe y procesa notificaciones de Wompi sandbox
+  - Consultar al usuario si surgen dudas antes de continuar
+
+---
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido.
@@ -337,7 +567,19 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     { "id": 7, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5", "14.6", "15.1", "15.2"] },
     { "id": 8, "tasks": ["15.3"] },
     { "id": 9, "tasks": ["16.1", "16.2", "17.1", "17.2", "17.3"] },
-    { "id": 10, "tasks": ["17.4", "17.5"] }
+    { "id": 10, "tasks": ["17.4", "17.5"] },
+    { "id": 11, "tasks": ["18.1", "18.2", "19.3", "19.4"] },
+    { "id": 12, "tasks": ["18.3", "18.4"] },
+    { "id": 13, "tasks": ["18.5"] },
+    { "id": 14, "tasks": ["18.6", "18.7", "19.1", "19.2"] },
+    { "id": 15, "tasks": ["18.8"] },
+    { "id": 16, "tasks": ["20.1", "20.2"] },
+    { "id": 17, "tasks": ["21.1", "22.1", "22.3"] },
+    { "id": 18, "tasks": ["22.2", "23.1"] },
+    { "id": 19, "tasks": ["23.2", "24.1", "24.2", "25.1", "25.2", "25.3"] },
+    { "id": 20, "tasks": ["26.1", "26.2", "26.3"] },
+    { "id": 21, "tasks": ["27.1", "27.2", "27.3", "27.4"] },
+    { "id": 22, "tasks": ["28"] }
   ]
 }
 ```

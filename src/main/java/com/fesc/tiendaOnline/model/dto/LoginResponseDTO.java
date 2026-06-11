@@ -13,4 +13,5 @@ public class LoginResponseDTO {
     private String rol;
     private String urlImagen;
     private Long expiraEn;
+    private String refreshToken;
 }

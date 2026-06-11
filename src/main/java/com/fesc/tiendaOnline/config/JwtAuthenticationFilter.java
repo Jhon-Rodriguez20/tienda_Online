@@ -11,6 +11,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.fesc.tiendaOnline.service.JwtBlacklist;
 import com.fesc.tiendaOnline.service.JwtService;
 
 import io.jsonwebtoken.JwtException;
@@ -24,10 +25,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+    private final JwtBlacklist jwtBlacklist;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserDetailsService userDetailsService) {
+    public JwtAuthenticationFilter(JwtService jwtService,
+                                   UserDetailsService userDetailsService,
+                                   JwtBlacklist jwtBlacklist) {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
+        this.jwtBlacklist = jwtBlacklist;
     }
 
     @Override
@@ -37,6 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // Auth y gestión de cuenta pública
         if (path.equals("/auth/login")) return true;
+        if (path.equals("/auth/refresh")) return true;
         if (path.equals("/usuario/registro")) return true;
         if (path.equals("/usuario/verificar")) return true;
         if (path.equals("/usuario/reenviar-codigo")) return true;
@@ -69,6 +75,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             final String token = authHeader.substring(7);
             final UUID idUsuario = jwtService.extractIdUsuario(token);
+
+            // Checkear JTI en la blacklist si ha sido el token revocado
+            final String jti = jwtService.extractJti(token);
+            if (jti != null && jwtBlacklist.isBlacklisted(jti)) {
+                SecurityContextHolder.clearContext();
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
 
             if (idUsuario != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(idUsuario.toString());
