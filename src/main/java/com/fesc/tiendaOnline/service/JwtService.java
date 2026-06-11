@@ -14,7 +14,6 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.function.Function;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -35,8 +34,7 @@ public class JwtService {
     @Value("${jwt.expiration:900000}")
     private Long expiration;
 
-    @Autowired
-    private Environment environment;
+    private final Environment environment;
 
     @Value("${jwt.issuer:tienda-online-api}")
     private String issuer;
@@ -54,6 +52,10 @@ public class JwtService {
 
     private RSAPrivateKey privateKey;
     private RSAPublicKey publicKey;
+
+    JwtService(Environment environment) {
+        this.environment = environment;
+    }
 
     @PostConstruct
     void loadKeys() throws Exception {
