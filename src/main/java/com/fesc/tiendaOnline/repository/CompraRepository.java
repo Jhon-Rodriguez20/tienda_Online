@@ -70,4 +70,7 @@ public interface CompraRepository extends JpaRepository<CompraEntity, UUID> {
                                                  Pageable pageable);
        
        boolean existsByNumeroCompra(String numeroCompra);
+
+       @Query("SELECT c FROM CompraEntity c WHERE c.wompiTransaccionId = :wompiTransaccionId")
+       Optional<CompraEntity> findByWompiTransaccionId(@Param("wompiTransaccionId") String wompiTransaccionId);
 }

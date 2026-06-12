@@ -380,35 +380,35 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
 
 ---
 
-- [ ] 20. Configuración base de Wompi
-  - [ ] 20.1 Agregar credenciales Wompi en `application.properties` y `.env.example`
+- [x] 20. Configuración base de Wompi
+  - [x] 20.1 Agregar credenciales Wompi en `application.properties` y `.env.example`
     - Agregar `wompi.public-key=${WOMPI_PUBLIC_KEY}`, `wompi.private-key=${WOMPI_PRIVATE_KEY}`, `wompi.events-key=${WOMPI_EVENTS_KEY}`, `wompi.integrity-key=${WOMPI_INTEGRITY_KEY}` en `application.properties`
     - Agregar `wompi.base-url=https://sandbox.wompi.co/v1`, `wompi.connect-timeout-seconds=5`, `wompi.read-timeout-seconds=15`
     - Agregar las cuatro variables de placeholder en `.env.example` (`WOMPI_PUBLIC_KEY=pub_stagtest_...`)
     - Confirmar que `.env` está en `.gitignore`
     - _Requirements: 22.1, 22.2, 22.3, 22.4_
 
-  - [ ] 20.2 Crear `WompiConfig.java` con validación de credenciales en `@PostConstruct`
+  - [x] 20.2 Crear `WompiConfig.java` con validación de credenciales en `@PostConstruct`
     - Crear clase `@Configuration` en el paquete `config` con los cuatro `@Value` de Wompi y `wompi.base-url`
     - Implementar `@PostConstruct validate()` que lanza `IllegalStateException("Las credenciales de Wompi no están configuradas")` si cualquier llave es nula o vacía
     - Exponer getters para `publicKey`, `privateKey`, `eventsKey`, `integrityKey`, `baseUrl`
     - _Requirements: 22.5_
 
-- [ ] 21. Modificar esquema de base de datos para Wompi
-  - [ ] 21.1 Agregar columna `wompi_transaccion_id` en `CompraEntity` y script DDL
+- [x] 21. Modificar esquema de base de datos para Wompi
+  - [x] 21.1 Agregar columna `wompi_transaccion_id` en `CompraEntity` y script DDL
     - Agregar `@Column(name = "wompi_transaccion_id", length = 50, nullable = true)` en `CompraEntity`
     - Crear script DDL: `ALTER TABLE compra ADD COLUMN IF NOT EXISTS wompi_transaccion_id VARCHAR(50) NULL;`
     - Agregar el ALTER al script de migración existente (`V2__add_indexes.sql`) o crear `V3__wompi.sql`
     - _Requirements: 19.7_
 
-- [ ] 22. Implementar `WompiService` — cliente HTTP a la API de Wompi
-  - [ ] 22.1 Crear DTOs de Wompi
+- [x] 22. Implementar `WompiService` — cliente HTTP a la API de Wompi
+  - [x] 22.1 Crear DTOs de Wompi
     - Crear `WompiTransaccionRequestDTO` con campos: `amount_in_cents`, `currency`, `customer_email`, `reference`, `payment_method` (objeto), `signature` (objeto con campo `integrity`)
     - Crear `WompiTransaccionResponseDTO` con campos: `id`, `status`, `reference`, `amount_in_cents`, `payment_method_type`, `async_payment_url`, `redirect_url`
     - Crear `WompiPagoEstadoResponseDTO` con campos: `compraId`, `numeroCompra`, `estadoCompra`, `wompiTransaccionId`, `estadoWompi`, `fechaActualizacion`
     - _Requirements: 19.1, 23.4_
 
-  - [ ] 22.2 Crear `WompiService.java` con cliente HTTP y métodos principales
+  - [x] 22.2 Crear `WompiService.java` con cliente HTTP y métodos principales
     - Crear clase `@Service` en el paquete `service`
     - Configurar `RestClient` (Spring 6) o `HttpClient` con `connectTimeout(5s)` y `readTimeout(15s)`; lanzar `WompiTimeoutException` si se supera el timeout
     - Implementar `crearTransaccion(WompiTransaccionRequestDTO)`: `POST {wompi.base-url}/transactions` con `Authorization: Bearer {privateKey}`, retornar `WompiTransaccionResponseDTO`
@@ -416,26 +416,26 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Implementar `calcularFirmaIntegridad(String referencia, long amountInCents, String currency)`: `SHA256(referencia + amountInCents + currency + integrityKey)`
     - _Requirements: 19.1, 19.6, 21.5, 23.2_
 
-  - [ ] 22.3 Crear `WompiTimeoutException.java`
+  - [x] 22.3 Crear `WompiTimeoutException.java`
     - Crear excepción de negocio en el paquete `service` que extiende `RuntimeException`
     - Lanzarla cuando se supera el timeout de conexión o lectura con Wompi
     - _Requirements: 21.5_
 
-- [ ] 23. Modificar `CompraRequestDTO` y `CompraController` para soportar métodos de pago Wompi
-  - [ ] 23.1 Agregar campos Wompi en `CompraRequestDTO`
+- [x] 23. Modificar `CompraRequestDTO` y `CompraController` para soportar métodos de pago Wompi
+  - [x] 23.1 Agregar campos Wompi en `CompraRequestDTO`
     - Agregar `private String wompiTipoPago` con validación `@Pattern(regexp = "BANCOLOMBIA_TRANSFER|NEQUI|CARD")`
     - Agregar `private String wompiCardToken` (sin validación obligatoria global; se valida condicionalmente)
     - Agregar `private String wompiNequiPhone` (sin validación obligatoria global)
     - Agregar `private Integer cuotas = 1` con `@Min(1) @Max(36)`
     - _Requirements: 19.2, 21.2_
 
-  - [ ] 23.2 Agregar validación condicional en `CompraController.realizarCompra`
+  - [x] 23.2 Agregar validación condicional en `CompraController.realizarCompra`
     - Antes de llamar al servicio, si `wompiTipoPago == "CARD"` y `wompiCardToken` es nulo o vacío → HTTP 400 con mensaje `"El token de tarjeta es obligatorio para pagos con tarjeta"`
     - Si `wompiTipoPago == "NEQUI"` y `wompiNequiPhone` es nulo o vacío → HTTP 400 con mensaje `"El número de teléfono es obligatorio para pagos con Nequi"`
     - _Requirements: 19.2, 21.4_
 
-- [ ] 24. Integrar `WompiService` en `CompraService.realizarCompra`
-  - [ ] 24.1 Llamar a Wompi al finalizar la creación de la compra en `realizarCompra`
+- [x] 24. Integrar `WompiService` en `CompraService.realizarCompra`
+  - [x] 24.1 Llamar a Wompi al finalizar la creación de la compra en `realizarCompra`
     - Después de guardar la `CompraEntity` y antes de almacenar en `IdempotencyStore`, construir `WompiTransaccionRequestDTO`:
       - `amount_in_cents = (long)(totalPagado * 100)`
       - `currency = "COP"`
@@ -451,18 +451,18 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Guardar la `CompraEntity` actualizada con `compraRepository.save(compra)`
     - _Requirements: 19.1, 19.3, 19.4, 19.7, 19.8, 19.9_
 
-  - [ ] 24.2 Manejar `WompiTimeoutException` en `realizarCompra`
+  - [x] 24.2 Manejar `WompiTimeoutException` en `realizarCompra`
     - Capturar `WompiTimeoutException` y lanzar `BusinessRuleException("No se pudo procesar el pago: timeout de conexión con Wompi")` para desencadenar rollback
     - _Requirements: 21.5_
 
-- [ ] 25. Implementar webhook de Wompi
-  - [ ] 25.1 Crear `WompiWebhookController.java`
+- [x] 25. Implementar webhook de Wompi
+  - [x] 25.1 Crear `WompiWebhookController.java`
     - Crear `@RestController` en el paquete `controller` con endpoint `POST /pagos/wompi/webhook`
     - Recibir `@RequestHeader("x-event-checksum") String checksum` y `@RequestBody String payload`
     - Delegar a `WompiWebhookService.procesarEvento(payload, checksum)` y retornar `ResponseEntity.ok().build()`
     - _Requirements: 20.1, 20.6_
 
-  - [ ] 25.2 Crear `WompiWebhookService.java`
+  - [x] 25.2 Crear `WompiWebhookService.java`
     - Crear clase `@Service` en el paquete `service`
     - Implementar `procesarEvento(String payload, String checksum)`:
       1. Parsear el payload JSON para extraer `id_evento`, `timestamp` y datos de la transacción
@@ -474,29 +474,29 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
       5. Almacenar `id_evento` en `IdempotencyStore` para idempotencia futura
     - _Requirements: 20.2, 20.3, 20.4, 20.5_
 
-  - [ ] 25.3 Registrar `/pagos/wompi/webhook` como ruta pública en `SecurityConfig`
+  - [x] 25.3 Registrar `/pagos/wompi/webhook` como ruta pública en `SecurityConfig`
     - Agregar `.requestMatchers(HttpMethod.POST, "/pagos/wompi/webhook").permitAll()` en `authorizeHttpRequests`
     - _Requirements: 20.1_
 
-- [ ] 26. Implementar consulta de estado de pago
-  - [ ] 26.1 Agregar endpoint `GET /compras/{compraId}/pago/estado` en `CompraController`
+- [x] 26. Implementar consulta de estado de pago
+  - [x] 26.1 Agregar endpoint `GET /compras/{compraId}/pago/estado` en `CompraController`
     - Agregar `@GetMapping("/{compraId}/pago/estado")` que llame a `wompiService.consultarEstadoPago(compraId, usuarioId)`
     - Retornar `WompiPagoEstadoResponseDTO`
     - _Requirements: 23.1_
 
-  - [ ] 26.2 Implementar `consultarEstadoPago` en `WompiService`
+  - [x] 26.2 Implementar `consultarEstadoPago` en `WompiService`
     - Buscar `CompraEntity` por `compraId`; si no tiene `wompiTransaccionId` → lanzar `NotFoundException("No existe una transacción Wompi asociada a esta compra")`
     - Llamar `consultarTransaccion(wompiTransaccionId)`
     - Si el status Wompi es `"APPROVED"` y la compra está en `PENDIENTE`, actualizar estado a `ACEPTADO` y guardar
     - Construir y retornar `WompiPagoEstadoResponseDTO`
     - _Requirements: 23.2, 23.3, 23.4, 23.5_
 
-  - [ ] 26.3 Registrar el endpoint de estado como ruta autenticada en `SecurityConfig`
+  - [x] 26.3 Registrar el endpoint de estado como ruta autenticada en `SecurityConfig`
     - Agregar `.requestMatchers(HttpMethod.GET, "/compras/{compraId}/pago/estado").authenticated()` en `authorizeHttpRequests`
     - _Requirements: 23.1_
 
-- [ ] 27. Tests para la integración con Wompi
-  - [ ] 27.1 Escribir tests unitarios para `WompiService`
+- [x] 27. Tests para la integración con Wompi
+  - [x] 27.1 Escribir tests unitarios para `WompiService`
     - Test: `crearTransaccion` con `BANCOLOMBIA_TRANSFER` → construye payload correcto y retorna `async_payment_url`
     - Test: `crearTransaccion` con `NEQUI` → construye payload con teléfono correcto
     - Test: `crearTransaccion` con `CARD` → construye payload con `token` e `installments`, sin datos de tarjeta crudos
@@ -504,20 +504,20 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Test: timeout de conexión → lanza `WompiTimeoutException`
     - _Requirements: 19.3, 19.4, 19.5, 21.3, 21.5_
 
-  - [ ] 27.2 Escribir tests unitarios para `WompiWebhookService`
+  - [x] 27.2 Escribir tests unitarios para `WompiWebhookService`
     - Test: firma correcta + evento APPROVED → compra actualizada a ACEPTADO
     - Test: firma incorrecta → lanza `UnauthorizedException` sin modificar compra
     - Test: evento duplicado (mismo `id_evento`) → no modifica compra segunda vez
     - Test: evento DECLINED → stock restaurado + compra CANCELADO
     - _Requirements: 20.2, 20.3, 20.4, 20.5_
 
-  - [ ] 27.3 Escribir tests unitarios para validaciones en `CompraController`
+  - [x] 27.3 Escribir tests unitarios para validaciones en `CompraController`
     - Test: `wompiTipoPago = "CARD"` sin `wompiCardToken` → HTTP 400
     - Test: `wompiTipoPago = "NEQUI"` sin `wompiNequiPhone` → HTTP 400
     - Test: `wompiTipoPago` con valor no permitido → HTTP 400 (fallará validación `@Pattern`)
     - _Requirements: 19.2, 21.4_
 
-  - [ ] 27.4 Escribir property tests para la integración Wompi
+  - [x] 27.4 Escribir property tests para la integración Wompi
     - **Property 28**: Para cualquier pago CARD, `wompiCardToken` es el único dato de tarjeta presente en el request del backend
     - **Property 29**: Para cualquier payload de webhook con firma incorrecta, `WompiWebhookService` no modifica ninguna `CompraEntity`
     - **Property 30**: Para cualquier `id_evento` procesado dos veces, la `CompraEntity` solo cambia estado una vez
@@ -525,7 +525,7 @@ Las cinco mejoras son independientes y no requieren cambios de esquema de base d
     - Usar `@Property` de jqwik en `WompiPropertyTest.java`
     - _Requirements: 21.1, 20.2, 20.5, 22.5_
 
-- [ ] 28. Checkpoint — Verificar integración Wompi completa
+- [x] 28. Checkpoint — Verificar integración Wompi completa
   - Verificar que el proyecto compila sin errores con las nuevas clases y dependencias
   - Probar en Postman con las llaves de sandbox: realizar compra con BANCOLOMBIA_TRANSFER, NEQUI y CARD
   - Verificar que el webhook recibe y procesa notificaciones de Wompi sandbox

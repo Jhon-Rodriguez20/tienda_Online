@@ -24,6 +24,8 @@ import com.fesc.tiendaOnline.model.dto.CompraRequestDTO;
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
 import com.fesc.tiendaOnline.model.dto.IdempotencyResult;
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
+import com.fesc.tiendaOnline.model.dto.WompiTransaccionRequestDTO;
+import com.fesc.tiendaOnline.model.dto.WompiTransaccionResponseDTO;
 import com.fesc.tiendaOnline.model.entity.CompraDetalleEntity;
 import com.fesc.tiendaOnline.model.entity.CompraEntity;
 import com.fesc.tiendaOnline.model.entity.CompraEstado;
@@ -35,6 +37,7 @@ import com.fesc.tiendaOnline.repository.CompraRepository;
 import com.fesc.tiendaOnline.repository.MetodoPagoRepository;
 import com.fesc.tiendaOnline.repository.ProductoRepository;
 import com.fesc.tiendaOnline.repository.UsuarioRepository;
+import com.fesc.tiendaOnline.exception.WompiTimeoutException;
 
 @Service
 public class CompraService {
@@ -47,12 +50,13 @@ public class CompraService {
     private final AdminValidationService adminValidationService;
     private final UsuarioValidationService usuarioValidationService;
     private final IdempotencyStore idempotencyStore;
+    private final WompiService wompiService;
     
     public CompraService(CompraRepository compraRepository, CompraDetalleRepository compraDetalleRepository,
             ProductoRepository productoRepository, UsuarioRepository usuarioRepository,
             MetodoPagoRepository metodoPagoRepository, NumeroCompraGenerator numeroCompraGenerator,
             AdminValidationService adminValidationService, UsuarioValidationService usuarioValidationService,
-            IdempotencyStore idempotencyStore) {
+            IdempotencyStore idempotencyStore, WompiService wompiService) {
         
         this.compraRepository = compraRepository;
         this.productoRepository = productoRepository;
@@ -62,6 +66,7 @@ public class CompraService {
         this.adminValidationService = adminValidationService;
         this.usuarioValidationService = usuarioValidationService;
         this.idempotencyStore = idempotencyStore;
+        this.wompiService = wompiService;
     }
 
     // OBTENER TODOS LOS METODOS DE PAGO PARA COMPRA
@@ -73,7 +78,6 @@ public class CompraService {
     }
 
     // CREAR COMPRA - SOLO CLIENTES
-    // Requirements: 1.2, 1.3, 3.1, 3.2, 3.4, 5.1, 5.2
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public IdempotencyResult<CompraResponseDTO> realizarCompra(CompraRequestDTO request, UUID usuarioId, String idempotencyKey) {
         // Idempotency check: retornar respuesta cacheada si la clave ya existe
@@ -105,7 +109,7 @@ public class CompraService {
         compra.setIdMetodoPago(metodoPago);
         compra.setUsuario(usuario);
         
-        // Acumular productos modificados para saveAll post-loop (Requirement 3.2)
+        // Acumular productos modificados para saveAll post-loop
         Map<UUID, ProductoEntity> modifiedProducts = new LinkedHashMap<>();
 
         // Procesar items y crear detalles
@@ -130,17 +134,106 @@ public class CompraService {
             
             producto.setStockProducto(producto.getStockProducto() - item.getCantidad());
             modifiedProducts.put(producto.getIdProducto(), producto);
-            // NO se llama productoRepository.save(producto) dentro del loop
         }
         
-        // Guardar todos los productos modificados en una sola operación (Requirement 3.2)
+        // Guardar todos los productos modificados en una sola operación
         productoRepository.saveAll(modifiedProducts.values());
         
         compra.setTotalPagado(totalPagado);
         
-        // Guardar la compra una sola vez; CascadeType.ALL persiste los detalles (Requirement 3.4)
+        // Guardar la compra una sola vez; CascadeType.ALL persiste los detalles
         CompraEntity compraGuardada = compraRepository.save(compra);
-        
+
+        // Llamar a Wompi tras guardar la CompraEntity
+        // Capturar WompiTimeoutException y lanzar BusinessRuleException para rollback
+        if (request.getWompiTipoPago() != null && !request.getWompiTipoPago().isBlank()) {
+
+            try {
+                long amountInCents = (long)(totalPagado * 100);
+                String currency = "COP";
+
+                // Construir signature
+                String signature =
+                wompiService.calcularFirmaIntegridad(
+                        numeroCompra,
+                        amountInCents,
+                        currency
+                );
+
+                // Construir payment_method según wompiTipoPago
+                WompiTransaccionRequestDTO.PaymentMethod paymentMethod = new WompiTransaccionRequestDTO.PaymentMethod();
+                
+                switch (request.getWompiTipoPago()) {
+                    
+                    case "BANCOLOMBIA_TRANSFER" -> {
+                        paymentMethod.setType("BANCOLOMBIA_TRANSFER");
+                        // Campos obligatorios para BANCOLOMBIA_TRANSFER según docs oficiales
+                        paymentMethod.setUser_type("PERSON");
+                        paymentMethod.setPayment_description("Pago en tienda online");
+                    }
+                    case "NEQUI" -> {
+                        paymentMethod.setType("NEQUI");
+                        paymentMethod.setPhone_number(request.getWompiNequiPhone());
+                    }
+                    case "CARD" -> {
+                        paymentMethod.setType("CARD");
+                        paymentMethod.setToken(request.getWompiCardToken());
+                        paymentMethod.setInstallments(request.getCuotas() != null ? request.getCuotas() : 1);
+                    }
+                    default -> throw new BusinessRuleException("Tipo de pago Wompi no soportado: " + request.getWompiTipoPago());
+                }
+
+                // Construir el request DTO completo
+                // signature es un string plano con el hash SHA-256 (no objeto)
+                WompiTransaccionRequestDTO wompiRequest = new WompiTransaccionRequestDTO();
+                wompiRequest.setAmount_in_cents(amountInCents);
+                wompiRequest.setCurrency(currency);
+                wompiRequest.setReference(numeroCompra);
+                wompiRequest.setCustomer_email(usuario.getEmail());
+                wompiRequest.setSignature(signature);
+                wompiRequest.setPayment_method_type(request.getWompiTipoPago());
+                wompiRequest.setPayment_method(paymentMethod);
+
+                // Llamar a la API de Wompi
+                String acceptanceToken = wompiService.obtenerAcceptanceToken();
+
+                wompiRequest.setAcceptanceToken(acceptanceToken);
+                WompiTransaccionResponseDTO wompiResponse = wompiService.crearTransaccion(wompiRequest);
+
+                // Manejar el status de la respuesta de Wompi
+                String wompiStatus = wompiResponse.getStatus();
+
+                if ("APPROVED".equals(wompiStatus)) {
+                    compraGuardada.setCompraEstado(CompraEstado.ACEPTADO);
+                    compraGuardada.setWompiTransaccionId(wompiResponse.getId());
+                
+                } else if ("PENDING".equals(wompiStatus)) {
+                    compraGuardada.setCompraEstado(CompraEstado.PENDIENTE);
+                    compraGuardada.setWompiTransaccionId(wompiResponse.getId());
+                
+                } else {
+                    throw new BusinessRuleException("Pago rechazado: " + wompiStatus);
+                }
+
+                // Guardar la CompraEntity actualizada con el estado y wompiTransaccionId
+                compraGuardada = compraRepository.save(compraGuardada);
+
+                CompraResponseDTO response = convertirAResponseDTO(compraGuardada);
+                // Incluir async_payment_url en la respuesta para pagos PENDING
+                if ("PENDING".equals(wompiStatus)) {
+                    response.setAsyncPaymentUrl(wompiResponse.getAsync_payment_url());
+                }
+
+                // Almacenar en el store de idempotencia para futuras solicitudes duplicadas
+                idempotencyStore.put(idempotencyKey, response);
+
+                return new IdempotencyResult<>(response, false);
+
+            } catch (WompiTimeoutException ex) {
+                throw new BusinessRuleException("No se pudo procesar el pago: timeout de conexión con Wompi");
+            }
+        }
+
         CompraResponseDTO response = convertirAResponseDTO(compraGuardada);
 
         // Almacenar en el store de idempotencia para futuras solicitudes duplicadas
@@ -150,7 +243,6 @@ public class CompraService {
     }
 
     // OBTENER MIS COMPRAS - CLIENTES
-    // Requirements: 6.1
     @Transactional(readOnly = true)
     public PaginacionResponseDTO<CompraResponseDTO> getMisCompras(UUID usuarioId, CompraBusquedaDTO busqueda) {
         Pageable pageable = PageRequest.of(busqueda.getPagina(), busqueda.getTamanio());
@@ -193,7 +285,6 @@ public class CompraService {
     }
 
     // CANCELAR COMPRA SI ESTÁ EN PENDIENTE - CLIENTES
-    // Requirements: 4.1, 4.2, 5.3
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void cancelarCompra(UUID compraId, UUID usuarioId) {
         CompraEntity compraEntity = compraRepository.findByIdWithDetails(compraId)
@@ -207,10 +298,10 @@ public class CompraService {
             throw new BusinessRuleException("Solo se pueden cancelar las compras en estado PENDIENTE");
         }
 
-        // Acumular productos restaurados para saveAll post-loop (Requirement 4.2)
+        // Acumular productos restaurados para saveAll post-loop
         Map<UUID, ProductoEntity> restoredProducts = new LinkedHashMap<>();
 
-        // Restaurar stock de productos con bloqueo pesimista (Requirement 5.3)
+        // Restaurar stock de productos con bloqueo pesimista
         for (CompraDetalleEntity detalle : compraEntity.getDetalles()) {
             ProductoEntity productoEntity = productoRepository
                     .findByIdWithLock(detalle.getProducto().getIdProducto())
@@ -221,7 +312,7 @@ public class CompraService {
             // NO se llama productoRepository.save(productoEntity) dentro del loop
         }
 
-        // Guardar todos los productos restaurados en una sola operación (Requirement 4.2)
+        // Guardar todos los productos restaurados en una sola operación
         productoRepository.saveAll(restoredProducts.values());
 
         compraEntity.setCompraEstado(CompraEstado.CANCELADO);
@@ -229,7 +320,6 @@ public class CompraService {
     }
 
     // OBTENER LAS COMPRAS - ADMIN
-    // Requirements: 6.1
     @Transactional(readOnly = true)
     public PaginacionResponseDTO<CompraResponseDTO> getAllCompras(CompraBusquedaDTO compraBusquedaDTO, UUID adminId) {
         adminValidationService.validarAdmin(adminId);
@@ -254,7 +344,6 @@ public class CompraService {
     }
 
     // ACTUALIZAR ESTADO DE COMPRA - ADMIN
-    // Requirements: 2.2, 2.3
     @Transactional
     public IdempotencyResult<CompraResponseDTO> putEstadoCompra(UUID compraId, ActualizarEstadoCompraDTO request, UUID adminId, String idempotencyKey) {
         // Idempotency check: retornar respuesta cacheada si la clave ya existe
@@ -308,6 +397,7 @@ public class CompraService {
         response.setFechaCompra(compra.getFechaCompra());
         response.setEstado(compra.getCompraEstado().toString());
         response.setMetodoPago(compra.getIdMetodoPago().getMetodoPago());
+        response.setWompiTransaccionId(compra.getWompiTransaccionId());
         
         List<CompraResponseDTO.CompraDetalleResponseDTO> detalles = new ArrayList<>();
         if (compra.getDetalles() != null && !compra.getDetalles().isEmpty()) {

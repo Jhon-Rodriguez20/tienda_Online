@@ -50,6 +50,9 @@ public class CompraEntity {
     @Column(name = "compra_estado", nullable = false)
     private CompraEstado compraEstado;
 
+    @Column(name = "wompi_transaccion_id", length = 50, nullable = true)
+    private String wompiTransaccionId;
+
     @ManyToOne
     @JoinColumn(name = "id_metodo_pago", referencedColumnName = "id_metodo_pago", nullable = false)
     private MetodoPagoCompraEntity idMetodoPago;

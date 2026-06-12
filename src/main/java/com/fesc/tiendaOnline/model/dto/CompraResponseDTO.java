@@ -15,6 +15,8 @@ public class CompraResponseDTO {
     private LocalDateTime fechaCompra;
     private String estado;
     private String metodoPago;
+    private String wompiTransaccionId;
+    private String asyncPaymentUrl;
     private List<CompraDetalleResponseDTO> detalles;
 
     @Data

@@ -28,8 +28,10 @@ import com.fesc.tiendaOnline.model.dto.CompraRequestDTO;
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
 import com.fesc.tiendaOnline.model.dto.IdempotencyResult;
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
+import com.fesc.tiendaOnline.model.dto.WompiPagoEstadoResponseDTO;
 import com.fesc.tiendaOnline.security.UserDetailsImpl;
 import com.fesc.tiendaOnline.service.CompraService;
+import com.fesc.tiendaOnline.service.WompiService;
 
 import jakarta.validation.Valid;
 
@@ -42,9 +44,11 @@ public class CompraController {
             "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$");
 
     private final CompraService compraService;
+    private final WompiService wompiService;
 
-    public CompraController(CompraService compraService) {
+    public CompraController(CompraService compraService, WompiService wompiService) {
         this.compraService = compraService;
+        this.wompiService = wompiService;
     }
 
     // ======= CLIENTE =================
@@ -64,6 +68,20 @@ public class CompraController {
         if (!UUID_V4_PATTERN.matcher(idempotencyKey).matches()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "El header Idempotency-Key debe ser un UUID v4 válido"));
+        }
+
+        // 2.5. Validación condicional de campos Wompi
+        String wompiTipoPago = requestDTO.getWompiTipoPago();
+        if ("CARD".equals(wompiTipoPago) &&
+                (requestDTO.getWompiCardToken() == null || requestDTO.getWompiCardToken().isBlank())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El token de tarjeta es obligatorio para pagos con tarjeta"));
+        }
+        
+        if ("NEQUI".equals(wompiTipoPago) &&
+                (requestDTO.getWompiNequiPhone() == null || requestDTO.getWompiNequiPhone().isBlank())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El número de teléfono es obligatorio para pagos con Nequi"));
         }
 
         UUID usuarioId = obtenerIdUsuarioAutenticado();
@@ -97,6 +115,13 @@ public class CompraController {
         UUID usuarioId = obtenerIdUsuarioAutenticado();
         CompraResponseDTO compraResponseDTO = compraService.getCompraById(compraId, usuarioId);
         return ResponseEntity.ok(compraResponseDTO);
+    }
+
+    @GetMapping("/{compraId}/pago/estado")
+    public ResponseEntity<WompiPagoEstadoResponseDTO> consultarEstadoPago(@PathVariable UUID compraId) {
+        UUID usuarioId = obtenerIdUsuarioAutenticado();
+        WompiPagoEstadoResponseDTO estadoPago = wompiService.consultarEstadoPago(compraId, usuarioId);
+        return ResponseEntity.ok(estadoPago);
     }
 
     @DeleteMapping("/{compraId}/cancelar")

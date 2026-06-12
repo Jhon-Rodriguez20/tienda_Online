@@ -92,6 +92,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/compras/realizar").hasRole("CLIENTE")
                 .requestMatchers(HttpMethod.POST, "/compras/mis-compras").hasRole("CLIENTE")
                 .requestMatchers(HttpMethod.DELETE, "/compras/{compraId}/cancelar").hasRole("CLIENTE")
+                // Compras: consulta de estado de pago Wompi (autenticado)
+                .requestMatchers(HttpMethod.GET, "/compras/{compraId}/pago/estado").authenticated()
+                // Wompi webhook: público (verificación de firma se hace en el servicio)
+                .requestMatchers(HttpMethod.POST, "/pagos/wompi/webhook").permitAll()
                 // Todo lo demás requiere autenticación
                 .anyRequest().authenticated()
             )
