@@ -27,8 +27,6 @@ import com.fesc.tiendaOnline.model.entity.CompraEntity;
 import com.fesc.tiendaOnline.model.entity.CompraEstado;
 import com.fesc.tiendaOnline.repository.CompraRepository;
 
-import tools.jackson.databind.ObjectMapper;
-
 @Service
 public class WompiService {
 
@@ -51,9 +49,6 @@ public class WompiService {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS));
 
-        // Usar MappingJackson2HttpMessageConverter (Jackson 2.x / com.fasterxml.jackson)
-        // para que los @JsonProperty de los DTOs sean reconocidos correctamente,
-        // ya que Spring Boot 4 registra por defecto Jackson 3.x (tools.jackson).
         MappingJackson2HttpMessageConverter jackson2Converter = new MappingJackson2HttpMessageConverter();
 
         this.restClient = RestClient.builder()
@@ -89,14 +84,6 @@ public class WompiService {
     // CREAR TRANSACCION EN WOMPI
     public WompiTransaccionResponseDTO crearTransaccion(WompiTransaccionRequestDTO request) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-
-            System.out.println("========== JSON WOMPI ==========");
-            System.out.println(
-                mapper.writerWithDefaultPrettyPrinter()
-                    .writeValueAsString(request)
-            );
-            System.out.println("================================");
             return restClient.post()
                     .uri(wompiConfig.getBaseUrl() + "/transactions")
                     .header("Authorization", "Bearer " + wompiConfig.getPrivateKey())
