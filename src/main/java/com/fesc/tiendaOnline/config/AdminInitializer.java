@@ -4,12 +4,12 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
 import com.fesc.tiendaOnline.model.entity.UsuarioEstado;
 import com.fesc.tiendaOnline.model.entity.UsuarioRolEntity;
 import com.fesc.tiendaOnline.repository.UsuarioRepository;
 import com.fesc.tiendaOnline.repository.UsuarioRolRepository;
-import com.fesc.tiendaOnline.service.BusinessRuleException;
 
 @Component
 public class AdminInitializer implements CommandLineRunner {

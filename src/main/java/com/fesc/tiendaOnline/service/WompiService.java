@@ -17,6 +17,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import com.fesc.tiendaOnline.config.WompiConfig;
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.exception.NotFoundException;
 import com.fesc.tiendaOnline.exception.WompiTimeoutException;
 import com.fesc.tiendaOnline.model.dto.WompiMerchantResponseDTO;

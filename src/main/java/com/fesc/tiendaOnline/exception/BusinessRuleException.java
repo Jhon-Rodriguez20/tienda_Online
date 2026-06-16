@@ -1,8 +1,6 @@
-package com.fesc.tiendaOnline.service;
+package com.fesc.tiendaOnline.exception;
 
 import org.springframework.http.HttpStatus;
-
-import com.fesc.tiendaOnline.exception.ApiException;
 
 public class BusinessRuleException extends ApiException {
 

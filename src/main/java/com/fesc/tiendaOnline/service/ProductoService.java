@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.model.dto.PaginacionResponseDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoBusquedaDTO;
 import com.fesc.tiendaOnline.model.dto.ProductoCategoriaResponseDTO;

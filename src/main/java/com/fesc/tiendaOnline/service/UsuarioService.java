@@ -9,6 +9,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
 import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.CancelarCuentaDTO;

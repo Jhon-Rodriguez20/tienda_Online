@@ -1,4 +1,4 @@
-package com.fesc.tiendaOnline.service;
+package com.fesc.tiendaOnline.component;
 
 import com.fesc.tiendaOnline.model.dto.CompraResponseDTO;
 import com.github.benmanes.caffeine.cache.Cache;

@@ -1,4 +1,4 @@
-package com.fesc.tiendaOnline.service;
+package com.fesc.tiendaOnline.component;
 
 import java.security.SecureRandom;
 

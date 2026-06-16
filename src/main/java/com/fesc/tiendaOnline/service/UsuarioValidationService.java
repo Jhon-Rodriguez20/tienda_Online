@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.exception.ConflictException;
 import com.fesc.tiendaOnline.exception.NotFoundException;
 import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;

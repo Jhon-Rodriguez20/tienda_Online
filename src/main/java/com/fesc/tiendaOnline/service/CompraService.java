@@ -37,6 +37,9 @@ import com.fesc.tiendaOnline.repository.CompraRepository;
 import com.fesc.tiendaOnline.repository.MetodoPagoRepository;
 import com.fesc.tiendaOnline.repository.ProductoRepository;
 import com.fesc.tiendaOnline.repository.UsuarioRepository;
+import com.fesc.tiendaOnline.component.IdempotencyStore;
+import com.fesc.tiendaOnline.component.NumeroCompraGenerator;
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.exception.WompiTimeoutException;
 
 @Service

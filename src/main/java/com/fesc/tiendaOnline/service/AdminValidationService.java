@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
 import com.fesc.tiendaOnline.repository.UsuarioRepository;
 

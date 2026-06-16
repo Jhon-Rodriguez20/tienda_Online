@@ -21,7 +21,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "refresh_token", indexes = {
-    @Index(name = "idx_refresh_token_token",    columnList = "token"),
+    @Index(name = "idx_refresh_token_token", columnList = "token"),
     @Index(name = "idx_refresh_token_id_usuario", columnList = "id_usuario")
 })
 public class RefreshTokenEntity {
@@ -31,24 +31,19 @@ public class RefreshTokenEntity {
     @Column(name = "id_token_refresh", columnDefinition = "UUID", updatable = false, nullable = false)
     private UUID idTokenRefresh;
 
-    /** Token opaco (UUID v4) almacenado como texto único. */
     @Column(name = "token", length = 36, nullable = false, unique = true)
     private String token;
 
-    /** Usuario propietario del token — carga diferida. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_usuario", referencedColumnName = "id_usuario", nullable = false)
     private UsuarioEntity usuario;
 
-    /** Momento a partir del cual el token ya no es válido. */
     @Column(name = "fecha_expiracion", nullable = false)
     private LocalDateTime fechaExpiracion;
 
-    /** Indica si el token fue revocado explícitamente (p.ej. en logout). */
     @Column(name = "revocado", nullable = false)
     private boolean revocado = false;
 
-    /** Fecha de creación del token; se asigna automáticamente al insertar. */
     @CreationTimestamp
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;

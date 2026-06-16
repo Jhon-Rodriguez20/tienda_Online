@@ -3,15 +3,9 @@ package com.fesc.tiendaOnline.model.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
-/**
- * Mapea la respuesta de Wompi al crear o consultar una transacción.
- * La API de Wompi envuelve el resultado en un objeto "data":
- * { "data": { "id": "...", "status": "...", ... }, "meta": {} }
- */
 @Data
 public class WompiTransaccionResponseDTO {
 
-    /** Objeto "data" que contiene la transacción */
     @JsonProperty("data")
     private TransaccionData data;
 
@@ -66,7 +60,6 @@ public class WompiTransaccionResponseDTO {
     }
 
     // ─── Métodos de conveniencia para mantener compatibilidad con el código existente ───
-
     public String getId() {
         return data != null ? data.getId() : null;
     }

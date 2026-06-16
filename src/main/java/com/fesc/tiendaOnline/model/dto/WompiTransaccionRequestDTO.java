@@ -28,11 +28,6 @@ public class WompiTransaccionRequestDTO {
     @JsonProperty("payment_method")
     private PaymentMethod payment_method;
 
-    /**
-     * Firma de integridad para la API de transacciones de Wompi.
-     * En la API REST se envía como string plano (el hash SHA-256).
-     * El formato objeto {"integrity":"..."} aplica solo al Widget/Checkout Web.
-     */
     @JsonProperty("signature")
     private String signature;
 

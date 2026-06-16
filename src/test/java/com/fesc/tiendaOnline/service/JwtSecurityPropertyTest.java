@@ -1,5 +1,6 @@
 package com.fesc.tiendaOnline.service;
 
+import com.fesc.tiendaOnline.component.JwtBlacklist;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
 import com.fesc.tiendaOnline.model.dto.LoginResponseDTO;
 import com.fesc.tiendaOnline.model.entity.RefreshTokenEntity;

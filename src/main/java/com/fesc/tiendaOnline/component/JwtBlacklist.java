@@ -1,4 +1,4 @@
-package com.fesc.tiendaOnline.service;
+package com.fesc.tiendaOnline.component;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
