@@ -405,7 +405,7 @@ Inicia sesión y obtiene los tokens.
   "refreshToken": "eyJhbGciOiJSUzI1NiJ9..."
 }
 ```
-
+El token JWT se entrega en el **Header Authorizathion**.
 ---
 
 #### POST `/auth/refresh`
@@ -422,7 +422,7 @@ Renueva el access token usando el refresh token.
 
 ---
 
-#### POST `/auth/logout` 🔒
+#### POST `/auth/logout`
 Invalida el access token actual.
 
 **Headers:**
@@ -578,7 +578,7 @@ Establece la nueva contraseña tras verificar el código.
 
 ---
 
-#### DELETE `/usuario/cancelar-cuenta` 🔒
+#### DELETE `/usuario/cancelar-cuenta`
 Cancela la cuenta del usuario autenticado.
 
 **Request:**
@@ -684,7 +684,7 @@ Búsqueda filtrada por término y/o categoría. Público.
 
 ---
 
-#### GET `/productos/categorias` 🔒 `ADMIN`
+#### GET `/productos/categorias`  `ADMIN`
 Lista todas las categorías disponibles.
 
 **Response `200 OK`:**
@@ -703,7 +703,7 @@ Lista todas las categorías disponibles.
 
 ---
 
-#### POST `/productos` 🔒 `ADMIN`
+#### POST `/productos` | `ADMIN`
 Crea un nuevo producto. Requiere `multipart/form-data`.
 
 **Content-Type:** `multipart/form-data`
@@ -722,7 +722,7 @@ Crea un nuevo producto. Requiere `multipart/form-data`.
 
 ---
 
-#### PUT `/productos/{idProducto}` 🔒 `ADMIN`
+#### PUT `/productos/{idProducto}` | `ADMIN`
 Actualiza un producto existente. Requiere `multipart/form-data`.
 
 **Campos:**
@@ -736,7 +736,7 @@ Actualiza un producto existente. Requiere `multipart/form-data`.
 
 ---
 
-#### DELETE `/productos/{idProducto}` 🔒 `ADMIN`
+#### DELETE `/productos/{idProducto}` | `ADMIN`
 Elimina un producto.
 
 **Response `200 OK`:**
@@ -751,7 +751,7 @@ Elimina un producto.
 
 ### Compras — `/compras`
 
-#### GET `/compras/metodo/pago` 🔒 `CLIENTE`
+#### GET `/compras/metodo/pago` | `CLIENTE`
 Lista los métodos de pago disponibles.
 
 **Response `200 OK`:**
@@ -766,7 +766,7 @@ Lista los métodos de pago disponibles.
 
 ---
 
-#### POST `/compras/realizar` 🔒 `CLIENTE`
+#### POST `/compras/realizar` | `CLIENTE`
 Crea una nueva compra y procesa el pago con Wompi.
 
 **Headers requeridos:**
@@ -832,7 +832,7 @@ Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
 
 ---
 
-#### POST `/compras/mis-compras` 🔒 `CLIENTE`
+#### POST `/compras/mis-compras` | `CLIENTE`
 Lista las compras del usuario autenticado con filtros opcionales.
 
 **Request:**
@@ -862,7 +862,7 @@ Lista las compras del usuario autenticado con filtros opcionales.
 
 ---
 
-#### GET `/compras/{compraId}/pago/estado` 🔒
+#### GET `/compras/{compraId}/pago/estado` 
 Consulta el estado de pago de una compra directamente en Wompi.
 
 **Response `200 OK`:**
@@ -879,7 +879,7 @@ Consulta el estado de pago de una compra directamente en Wompi.
 
 ---
 
-#### DELETE `/compras/{compraId}/cancelar` 🔒 `CLIENTE`
+#### DELETE `/compras/{compraId}/cancelar` | `CLIENTE`
 Cancela una compra pendiente del usuario autenticado.
 
 **Response `200 OK`:**
@@ -892,7 +892,7 @@ Cancela una compra pendiente del usuario autenticado.
 
 ---
 
-#### POST `/compras/admin/todas` 🔒 `ADMIN`
+#### POST `/compras/admin/todas` | `ADMIN`
 Lista todas las compras de todos los usuarios con filtros.
 
 **Request:** mismo esquema que `/compras/mis-compras`.
@@ -901,7 +901,7 @@ Lista todas las compras de todos los usuarios con filtros.
 
 ---
 
-#### PUT `/compras/admin/{compraId}/estado` 🔒 `ADMIN`
+#### PUT `/compras/admin/{compraId}/estado` | `ADMIN`
 Actualiza el estado de una compra manualmente.
 
 **Headers requeridos:**
