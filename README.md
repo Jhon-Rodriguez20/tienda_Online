@@ -405,7 +405,7 @@ Inicia sesión y obtiene los tokens.
   "refreshToken": "eyJhbGciOiJSUzI1NiJ9..."
 }
 ```
-El token JWT se entrega en el **Header Authorizathion**.
+El token JWT se entrega en el "Header". Aparece como: `Authorization: Bearer <Token>`
 ---
 
 #### POST `/auth/refresh`
