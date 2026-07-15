@@ -71,6 +71,35 @@ public interface CompraRepository extends JpaRepository<CompraEntity, UUID> {
        
        boolean existsByNumeroCompra(String numeroCompra);
 
+       // ── Queries by estado ─────────────────────────────────────────────────────
+
+       @Query(value = "SELECT DISTINCT c FROM CompraEntity c " +
+              "LEFT JOIN FETCH c.usuario " +
+              "LEFT JOIN FETCH c.idMetodoPago " +
+              "WHERE c.usuario.idUsuario = :usuarioId AND c.compraEstado = :estado",
+              countQuery = "SELECT COUNT(DISTINCT c) FROM CompraEntity c " +
+              "WHERE c.usuario.idUsuario = :usuarioId AND c.compraEstado = :estado")
+       Page<CompraEntity> findByUsuarioIdAndEstado(@Param("usuarioId") UUID usuarioId,
+                                                   @Param("estado") com.fesc.tiendaOnline.model.entity.CompraEstado estado,
+                                                   Pageable pageable);
+
+       @Query(value = "SELECT DISTINCT c FROM CompraEntity c " +
+              "LEFT JOIN FETCH c.usuario " +
+              "LEFT JOIN FETCH c.idMetodoPago " +
+              "WHERE c.compraEstado = :estado",
+              countQuery = "SELECT COUNT(DISTINCT c) FROM CompraEntity c " +
+              "WHERE c.compraEstado = :estado")
+       Page<CompraEntity> findByEstado(@Param("estado") com.fesc.tiendaOnline.model.entity.CompraEstado estado,
+                                       Pageable pageable);
+
        @Query("SELECT c FROM CompraEntity c WHERE c.wompiTransaccionId = :wompiTransaccionId")
        Optional<CompraEntity> findByWompiTransaccionId(@Param("wompiTransaccionId") String wompiTransaccionId);
+
+       @Query("SELECT COUNT(c) > 0 FROM CompraEntity c JOIN c.detalles d " +
+              "WHERE c.usuario.idUsuario = :idUsuario " +
+              "AND c.compraEstado IN :estados " +
+              "AND d.producto.idProducto = :idProducto")
+       boolean existsByUsuarioAndEstadoAndProducto(@Param("idUsuario") UUID idUsuario,
+                                                   @Param("estados") java.util.List<com.fesc.tiendaOnline.model.entity.CompraEstado> estados,
+                                                   @Param("idProducto") UUID idProducto);
 }

@@ -116,6 +116,12 @@ public class AuthService {
         response.setEmail(usuario.getEmail());
         response.setRol(usuario.getUsuarioRol().getRolUsuario());
         response.setUrlImagen(usuario.getUrlImagen());
+        response.setTelefono(usuario.getTelefono());
+        response.setPais(usuario.getPais());
+        response.setCiudad(usuario.getCiudad());
+        response.setDepartamento(usuario.getDepartamento());
+        response.setDireccion(usuario.getDireccion());
+        response.setCodigoPostal(usuario.getCodigoPostal() != null ? usuario.getCodigoPostal() : "No disponible");
         response.setExpiraEn(jwtService.getExpirationTimeToken());
         response.setRefreshToken(refreshTokenEntity.getToken());
 

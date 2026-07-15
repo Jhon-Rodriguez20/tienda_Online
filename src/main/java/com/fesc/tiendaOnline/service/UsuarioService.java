@@ -10,13 +10,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fesc.tiendaOnline.exception.BusinessRuleException;
+import com.fesc.tiendaOnline.exception.ConflictException;
+import com.fesc.tiendaOnline.exception.ForbiddenException;
+import com.fesc.tiendaOnline.exception.NotFoundException;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
 import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.CancelarCuentaDTO;
 import com.fesc.tiendaOnline.model.dto.SolicitudRecuperacionContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioCreateDTO;
+import com.fesc.tiendaOnline.model.dto.UsuarioPerfilResponseDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioReenvioCodigoDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioResponseDTO;
+import com.fesc.tiendaOnline.model.dto.UsuarioUpdateDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioVerificacionDTO;
 import com.fesc.tiendaOnline.model.dto.VerificarCodigoRecuperacionContrasenaDTO;
 import com.fesc.tiendaOnline.model.entity.UsuarioCodigoVerificacionEntity;
@@ -198,6 +203,57 @@ public class UsuarioService {
 
         usuarioCodigoVerificacionRepository.deleteByIdUsuario(usuario.getIdUsuario());
         emailService.enviarConfirmacionCancelacionCuenta(usuario.getEmail());
+    }
+
+    public UsuarioPerfilResponseDTO obtenerPerfil(UUID idUsuario) {
+        UsuarioEntity usuario = usuarioValidationService.obtenerUsuarioPorId(idUsuario);
+
+        if (usuario.getEstado() == UsuarioEstado.INACTIVO || usuario.getEstado() == UsuarioEstado.CANCELADO) {
+            throw new ForbiddenException("La cuenta no se encuentra activa");
+        }
+
+        return mapToPerfilResponse(usuario);
+    }
+
+    @Transactional
+    public UsuarioPerfilResponseDTO actualizarPerfil(UUID idUsuario, UsuarioUpdateDTO dto) {
+        UsuarioEntity usuario = usuarioValidationService.obtenerUsuarioPorId(idUsuario);
+
+        if (usuario.getEstado() == UsuarioEstado.INACTIVO || usuario.getEstado() == UsuarioEstado.CANCELADO) {
+            throw new ForbiddenException("La cuenta no se encuentra activa");
+        }
+
+        usuarioRepository.findByTelefono(dto.getTelefono()).ifPresent(existente -> {
+            if (!existente.getIdUsuario().equals(idUsuario)) {
+                throw new ConflictException("El teléfono ya está registrado por otro usuario");
+            }
+        });
+
+        usuario.setNombre(dto.getNombre());
+        usuario.setApellido(dto.getApellido());
+        usuario.setTelefono(dto.getTelefono());
+        usuario.setPais(dto.getPais());
+        usuario.setDepartamento(dto.getDepartamento());
+        usuario.setCiudad(dto.getCiudad());
+        usuario.setDireccion(dto.getDireccion());
+        usuario.setCodigoPostal(dto.getCodigoPostal());
+
+        UsuarioEntity usuarioActualizado = usuarioRepository.save(usuario);
+        return mapToPerfilResponse(usuarioActualizado);
+    }
+
+    private UsuarioPerfilResponseDTO mapToPerfilResponse(UsuarioEntity usuario) {
+        UsuarioPerfilResponseDTO dto = new UsuarioPerfilResponseDTO();
+        dto.setNombre(usuario.getNombre());
+        dto.setApellido(usuario.getApellido());
+        dto.setEmail(usuario.getEmail());
+        dto.setTelefono(usuario.getTelefono());
+        dto.setPais(usuario.getPais());
+        dto.setDepartamento(usuario.getDepartamento());
+        dto.setCiudad(usuario.getCiudad());
+        dto.setDireccion(usuario.getDireccion());
+        dto.setCodigoPostal(usuario.getCodigoPostal());
+        return dto;
     }
 
     private void manejarIntentoFallidoRecuperacion(UsuarioEntity usuario) {

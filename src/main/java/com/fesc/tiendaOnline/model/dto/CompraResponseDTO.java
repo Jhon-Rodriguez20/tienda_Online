@@ -17,7 +17,20 @@ public class CompraResponseDTO {
     private String metodoPago;
     private String wompiTransaccionId;
     private String asyncPaymentUrl;
+    private CompraUsuarioResponseDTO usuario;
     private List<CompraDetalleResponseDTO> detalles;
+
+    @Data
+    public static class CompraUsuarioResponseDTO {
+        private UUID idUsuario;
+        private String nombre;
+        private String email;
+        private String telefono;
+        private String direccion;
+        private String ciudad;
+        private String departamento;
+        private String pais;
+    }
 
     @Data
     public static class CompraDetalleResponseDTO {

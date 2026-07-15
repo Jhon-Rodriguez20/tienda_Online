@@ -34,7 +34,7 @@ public class SecurityConfig {
     private final UserDetailsService userDetailsService;
     private final Environment environment;
 
-    @Value("${app.cors.allowed-origins:http://localhost:8080}")
+    @Value("${app.cors.allowed-origins:http://localhost:4200/}")
     private List<String> allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
@@ -96,6 +96,16 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/compras/{compraId}/pago/estado").authenticated()
                 // Wompi webhook: público (verificación de firma se hace en el servicio)
                 .requestMatchers(HttpMethod.POST, "/pagos/wompi/webhook").permitAll()
+                // Reviews: rutas específicas antes de wildcards
+                .requestMatchers(HttpMethod.GET, "/reviews/producto/*/mi-review").authenticated()
+                // Reviews: lectura pública
+                .requestMatchers(HttpMethod.GET, "/reviews/producto/**").permitAll()
+                // Reviews: escritura solo CLIENTE
+                .requestMatchers(HttpMethod.POST, "/reviews").hasRole("CLIENTE")
+                .requestMatchers(HttpMethod.DELETE, "/reviews/{idReview}").hasRole("CLIENTE")
+                // Perfil de usuario: autenticado
+                .requestMatchers(HttpMethod.GET, "/usuario/perfil").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/usuario/perfil").authenticated()
                 // Todo lo demás requiere autenticación
                 .anyRequest().authenticated()
             )

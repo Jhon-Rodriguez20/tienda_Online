@@ -257,10 +257,14 @@ public class CompraService {
                 .<Page<CompraEntity>>map(c -> new PageImpl<>(List.of(c), pageable, 1))
                 .orElseGet(() -> Page.empty(pageable));
         
-            } else if (busqueda.getFechaInicio() != null && busqueda.getFechaFin() != null) {
+        } else if (busqueda.getFechaInicio() != null && busqueda.getFechaFin() != null) {
             paginaCompras = compraRepository.findByUsuarioIdAndFechaBetween(usuarioId,
                 busqueda.getFechaInicio(), busqueda.getFechaFin(), pageable);
         
+        } else if (busqueda.getEstado() != null && !busqueda.getEstado().isEmpty()) {
+            CompraEstado estado = CompraEstado.valueOf(busqueda.getEstado().toUpperCase());
+            paginaCompras = compraRepository.findByUsuarioIdAndEstado(usuarioId, estado, pageable);
+
         } else {
             paginaCompras = compraRepository.findByUsuarioId(usuarioId, pageable);
         }
@@ -339,6 +343,10 @@ public class CompraService {
             paginaCompras = compraRepository.findByFechaBetween(
                 compraBusquedaDTO.getFechaInicio(), compraBusquedaDTO.getFechaFin(), pageable);
         
+        } else if (compraBusquedaDTO.getEstado() != null && !compraBusquedaDTO.getEstado().isEmpty()) {
+            CompraEstado estado = CompraEstado.valueOf(compraBusquedaDTO.getEstado().toUpperCase());
+            paginaCompras = compraRepository.findByEstado(estado, pageable);
+
         } else {
             paginaCompras = compraRepository.findAllWithDetails(pageable);
         }
@@ -401,6 +409,20 @@ public class CompraService {
         response.setEstado(compra.getCompraEstado().toString());
         response.setMetodoPago(compra.getIdMetodoPago().getMetodoPago());
         response.setWompiTransaccionId(compra.getWompiTransaccionId());
+
+        // Mapear información del usuario
+        if (compra.getUsuario() != null) {
+            CompraResponseDTO.CompraUsuarioResponseDTO usuarioDTO = new CompraResponseDTO.CompraUsuarioResponseDTO();
+            usuarioDTO.setIdUsuario(compra.getUsuario().getIdUsuario());
+            usuarioDTO.setNombre(compra.getUsuario().getNombre());
+            usuarioDTO.setEmail(compra.getUsuario().getEmail());
+            usuarioDTO.setTelefono(compra.getUsuario().getTelefono());
+            usuarioDTO.setDireccion(compra.getUsuario().getDireccion());
+            usuarioDTO.setCiudad(compra.getUsuario().getCiudad());
+            usuarioDTO.setDepartamento(compra.getUsuario().getDepartamento());
+            usuarioDTO.setPais(compra.getUsuario().getPais());
+            response.setUsuario(usuarioDTO);
+        }
         
         List<CompraResponseDTO.CompraDetalleResponseDTO> detalles = new ArrayList<>();
         if (compra.getDetalles() != null && !compra.getDetalles().isEmpty()) {

@@ -15,8 +15,10 @@ import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.CancelarCuentaDTO;
 import com.fesc.tiendaOnline.model.dto.SolicitudRecuperacionContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioCreateDTO;
+import com.fesc.tiendaOnline.model.dto.UsuarioPerfilResponseDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioReenvioCodigoDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioResponseDTO;
+import com.fesc.tiendaOnline.model.dto.UsuarioUpdateDTO;
 import com.fesc.tiendaOnline.model.dto.UsuarioVerificacionDTO;
 import com.fesc.tiendaOnline.model.dto.VerificarCodigoRecuperacionContrasenaDTO;
 import com.fesc.tiendaOnline.security.UserDetailsImpl;
@@ -25,7 +27,9 @@ import com.fesc.tiendaOnline.service.UsuarioService;
 import jakarta.validation.Valid;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
@@ -102,5 +106,26 @@ public class UsuarioController {
         response.put("status", "success");
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/perfil")
+    public ResponseEntity<UsuarioPerfilResponseDTO> obtenerPerfil() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
+
+        UsuarioPerfilResponseDTO perfil = usuarioService.obtenerPerfil(idUsuario);
+        return ResponseEntity.ok(perfil);
+    }
+
+    @PutMapping("/perfil")
+    public ResponseEntity<UsuarioPerfilResponseDTO> actualizarPerfil(
+            @Valid @RequestBody UsuarioUpdateDTO usuarioUpdateDTO) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
+
+        UsuarioPerfilResponseDTO perfilActualizado = usuarioService.actualizarPerfil(idUsuario, usuarioUpdateDTO);
+        return ResponseEntity.ok(perfilActualizado);
     }
 }

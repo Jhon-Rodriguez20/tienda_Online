@@ -1,23 +1,17 @@
 package com.fesc.tiendaOnline.model.dto;
 
-import java.util.UUID;
-
 import lombok.Data;
 
 @Data
-public class LoginResponseDTO {
+public class UsuarioPerfilResponseDTO {
 
-    private UUID idUsuario;
     private String nombre;
+    private String apellido;
     private String email;
     private String telefono;
     private String pais;
-    private String ciudad;
     private String departamento;
+    private String ciudad;
     private String direccion;
     private String codigoPostal;
-    private String rol;
-    private String urlImagen;
-    private Long expiraEn;
-    private String refreshToken;
 }
