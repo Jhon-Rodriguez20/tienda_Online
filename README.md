@@ -1,8 +1,8 @@
-# 🛒 Tienda Online — Backend API
+# Tienda Online — Backend API
 
 Plataforma e-commerce fullstack construida con **Spring Boot 4.0.5** y **Java 25**. API REST con autenticación JWT (RSA), integración con pasarela de pagos Wompi, rate limiting, caché con Caffeine, y arquitectura lista para producción.
 
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@ Plataforma e-commerce fullstack construida con **Spring Boot 4.0.5** y **Java 25
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Stack Tecnológico
+## Stack Tecnológico
 
 | Capa | Tecnología | Versión |
 |------|-----------|---------|
@@ -45,7 +45,7 @@ Plataforma e-commerce fullstack construida con **Spring Boot 4.0.5** y **Java 25
 | Build | Maven | 3.9+ |
 | Testing | JUnit 5 + jqwik (property-based) | 1.8.4 |
 
-## ✨ Características Principales
+## Características Principales
 
 - **Autenticación JWT con RSA**: Tokens firmados con clave privada RSA, verificados con pública. Refresh token rotation y blacklist.
 - **Rate Limiting por endpoint**: Protección granular con Bucket4j (auth: 10/min, productos: 100/min, compras: 30/min).
@@ -59,13 +59,13 @@ Plataforma e-commerce fullstack construida con **Spring Boot 4.0.5** y **Java 25
 - **Paginación server-side**: Consistente en todos los endpoints de listado.
 - **BigDecimal para valores monetarios**: Precisión financiera sin errores de redondeo.
 
-## 📖 Documentación API
+## Documentación API
 
 Con el servidor corriendo, acceder a:
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI JSON**: http://localhost:8080/v3/api-docs
 
-## 🛠️ Decisiones de Diseño
+## Decisiones de Diseño
 
 | Decisión | Alternativa | Razón |
 |----------|-------------|-------|
@@ -75,7 +75,7 @@ Con el servidor corriendo, acceder a:
 | Signals (Angular) en vez de NgRx | NgRx Store | Menor boilerplate, rendimiento nativo, suficiente para la escala de la app. |
 | Property-based testing | Solo unit tests | Demuestra cobertura de edge cases automáticos. |
 
-## ⚡ Quick Start
+## Quick Start
 
 ```bash
 # 1. Clonar el repositorio
@@ -107,7 +107,7 @@ createdb tiendaOnline
 ./mvnw test
 ```
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 src/main/java/com/fesc/tiendaOnline/
@@ -124,7 +124,7 @@ src/main/java/com/fesc/tiendaOnline/
 └── service/            # Lógica de negocio
 ```
 
-## 🔐 Endpoints Principales
+## Endpoints Principales
 
 | Método | Ruta | Acceso | Descripción |
 |--------|------|--------|-------------|
@@ -137,7 +137,7 @@ src/main/java/com/fesc/tiendaOnline/
 | POST | `/reviews` | CLIENTE | Crear/actualizar reseña |
 | POST | `/pagos/wompi/webhook` | Público | Webhook de Wompi |
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Unit + Integration tests
@@ -147,6 +147,6 @@ src/main/java/com/fesc/tiendaOnline/
 ./mvnw test -Dtest="*Property*"
 ```
 
-## 📄 Licencia
+## Licencia
 
 Proyecto personal de portafolio. Todos los derechos reservados.
