@@ -1,0 +1,13 @@
+target/
+.git/
+.gitignore
+.env
+*.pem
+*.key
+private_key.pem
+public_key.pem
+.vscode/
+.kiro/
+.mvn/wrapper/maven-wrapper.jar
+*.md
+docker-compose.yml

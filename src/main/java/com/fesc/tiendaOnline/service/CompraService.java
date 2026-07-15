@@ -1,7 +1,7 @@
 package com.fesc.tiendaOnline.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +41,7 @@ import com.fesc.tiendaOnline.component.IdempotencyStore;
 import com.fesc.tiendaOnline.component.NumeroCompraGenerator;
 import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.exception.WompiTimeoutException;
+import com.fesc.tiendaOnline.mapper.CompraMapper;
 
 @Service
 public class CompraService {
@@ -54,12 +55,13 @@ public class CompraService {
     private final UsuarioValidationService usuarioValidationService;
     private final IdempotencyStore idempotencyStore;
     private final WompiService wompiService;
+    private final CompraMapper compraMapper;
     
     public CompraService(CompraRepository compraRepository, CompraDetalleRepository compraDetalleRepository,
             ProductoRepository productoRepository, UsuarioRepository usuarioRepository,
             MetodoPagoRepository metodoPagoRepository, NumeroCompraGenerator numeroCompraGenerator,
             AdminValidationService adminValidationService, UsuarioValidationService usuarioValidationService,
-            IdempotencyStore idempotencyStore, WompiService wompiService) {
+            IdempotencyStore idempotencyStore, WompiService wompiService, CompraMapper compraMapper) {
         
         this.compraRepository = compraRepository;
         this.productoRepository = productoRepository;
@@ -70,6 +72,7 @@ public class CompraService {
         this.usuarioValidationService = usuarioValidationService;
         this.idempotencyStore = idempotencyStore;
         this.wompiService = wompiService;
+        this.compraMapper = compraMapper;
     }
 
     // OBTENER TODOS LOS METODOS DE PAGO PARA COMPRA
@@ -95,7 +98,7 @@ public class CompraService {
         MetodoPagoCompraEntity metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
                 .orElseThrow(() -> new BusinessRuleException("Método de pago no encontrado"));
         
-        double totalPagado = 0.0;
+        BigDecimal totalPagado = BigDecimal.ZERO;
         
         // Generar número de compra único
         String numeroCompra;
@@ -106,7 +109,7 @@ public class CompraService {
         // Crear compra
         CompraEntity compra = new CompraEntity();
         compra.setNumeroCompra(numeroCompra);
-        compra.setTotalPagado(totalPagado);
+        compra.setTotalPagado(BigDecimal.ZERO);
         compra.setFechaCompra(LocalDateTime.now());
         compra.setCompraEstado(CompraEstado.PENDIENTE);
         compra.setIdMetodoPago(metodoPago);
@@ -129,11 +132,11 @@ public class CompraService {
             detalle.setProducto(producto);
             detalle.setCantidad(item.getCantidad());
             detalle.setPrecioUnitario(producto.getPrecioProducto());
-            detalle.setSubtotal(producto.getPrecioProducto() * item.getCantidad());
+            detalle.setSubtotal(producto.getPrecioProducto().multiply(BigDecimal.valueOf(item.getCantidad())));
             
             compra.addDetalle(detalle);
             
-            totalPagado += detalle.getSubtotal();
+            totalPagado = totalPagado.add(detalle.getSubtotal());
             
             producto.setStockProducto(producto.getStockProducto() - item.getCantidad());
             modifiedProducts.put(producto.getIdProducto(), producto);
@@ -152,7 +155,7 @@ public class CompraService {
         if (request.getWompiTipoPago() != null && !request.getWompiTipoPago().isBlank()) {
 
             try {
-                long amountInCents = (long)(totalPagado * 100);
+                long amountInCents = totalPagado.movePointRight(2).longValueExact();
                 String currency = "COP";
 
                 // Construir signature
@@ -401,66 +404,14 @@ public class CompraService {
     }
 
     private CompraResponseDTO convertirAResponseDTO(CompraEntity compra) {
-        CompraResponseDTO response = new CompraResponseDTO();
-        response.setIdCompra(compra.getIdCompra());
-        response.setNumeroCompra(compra.getNumeroCompra());
-        response.setTotalPagado(compra.getTotalPagado());
-        response.setFechaCompra(compra.getFechaCompra());
-        response.setEstado(compra.getCompraEstado().toString());
-        response.setMetodoPago(compra.getIdMetodoPago().getMetodoPago());
-        response.setWompiTransaccionId(compra.getWompiTransaccionId());
-
-        // Mapear información del usuario
-        if (compra.getUsuario() != null) {
-            CompraResponseDTO.CompraUsuarioResponseDTO usuarioDTO = new CompraResponseDTO.CompraUsuarioResponseDTO();
-            usuarioDTO.setIdUsuario(compra.getUsuario().getIdUsuario());
-            usuarioDTO.setNombre(compra.getUsuario().getNombre());
-            usuarioDTO.setEmail(compra.getUsuario().getEmail());
-            usuarioDTO.setTelefono(compra.getUsuario().getTelefono());
-            usuarioDTO.setDireccion(compra.getUsuario().getDireccion());
-            usuarioDTO.setCiudad(compra.getUsuario().getCiudad());
-            usuarioDTO.setDepartamento(compra.getUsuario().getDepartamento());
-            usuarioDTO.setPais(compra.getUsuario().getPais());
-            response.setUsuario(usuarioDTO);
-        }
-        
-        List<CompraResponseDTO.CompraDetalleResponseDTO> detalles = new ArrayList<>();
-        if (compra.getDetalles() != null && !compra.getDetalles().isEmpty()) {
-            for (CompraDetalleEntity detalle : compra.getDetalles()) {
-                CompraResponseDTO.CompraDetalleResponseDTO detalleDTO = new CompraResponseDTO.CompraDetalleResponseDTO();
-                detalleDTO.setIdProducto(detalle.getProducto().getIdProducto());
-                detalleDTO.setNombreProducto(detalle.getProducto().getNombreProducto());
-                detalleDTO.setCantidad(detalle.getCantidad());
-                detalleDTO.setPrecioUnitario(detalle.getPrecioUnitario());
-                detalleDTO.setSubtotal(detalle.getSubtotal());
-                detalles.add(detalleDTO);
-            }
-        }
-        response.setDetalles(detalles);
-        
-        return response;
+        return compraMapper.toResponse(compra);
     }
 
     private CompraMetodoPagoResponseDTO metodoPagoConvertirAResponseDTO(MetodoPagoCompraEntity metodoPagoCompraEntity) {
-        CompraMetodoPagoResponseDTO responseDTO = new CompraMetodoPagoResponseDTO();
-        responseDTO.setIdMetodoPago(metodoPagoCompraEntity.getIdMetodoPago());
-        responseDTO.setMetodoPago(metodoPagoCompraEntity.getMetodoPago());
-        return responseDTO;
+        return compraMapper.toMetodoPagoResponse(metodoPagoCompraEntity);
     }
 
     private PaginacionResponseDTO<CompraResponseDTO> convertirAPaginacionResponse(Page<CompraEntity> paginaCompras) {
-        List<CompraResponseDTO> contenido = paginaCompras.getContent().stream()
-                .map(this::convertirAResponseDTO)
-                .collect(Collectors.toList());
-        
-        return new PaginacionResponseDTO<>(
-            contenido,
-            paginaCompras.getNumber(),
-            paginaCompras.getSize(),
-            paginaCompras.getTotalElements(),
-            paginaCompras.getTotalPages(),
-            paginaCompras.isLast(),
-            paginaCompras.isFirst()
-        );
+        return compraMapper.toPaginacionResponse(paginaCompras);
     }
 }

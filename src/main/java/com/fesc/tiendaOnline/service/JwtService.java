@@ -97,15 +97,15 @@ public class JwtService {
     }
 
     public UUID extractIdUsuario(String token) {
-        return UUID.fromString(extractClaim(token, Claims::getSubject));
+        return UUID.fromString(extractClaim(token, claims -> claims.getSubject()));
     }
 
     public String extractJti(String token) {
-        return extractClaim(token, Claims::getId);
+        return extractClaim(token, claims -> claims.getId());
     }
 
     public Date extractExpirationToken(String token) {
-        return extractClaim(token, Claims::getExpiration);
+        return extractClaim(token, claims -> claims.getExpiration());
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {

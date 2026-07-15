@@ -80,6 +80,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/productos/categorias").hasRole("ADMIN")
                 // Archivos estáticos
                 .requestMatchers("/uploads/**", "/images/**").permitAll()
+                // Swagger / OpenAPI
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 // Productos: escritura solo ADMIN
                 .requestMatchers(HttpMethod.POST, "/productos").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/productos/**").hasRole("ADMIN")

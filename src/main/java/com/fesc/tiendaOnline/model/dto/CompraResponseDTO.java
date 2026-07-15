@@ -1,5 +1,6 @@
 package com.fesc.tiendaOnline.model.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -11,7 +12,7 @@ public class CompraResponseDTO {
 
     private UUID idCompra;
     private String numeroCompra;
-    private Double totalPagado;
+    private BigDecimal totalPagado;
     private LocalDateTime fechaCompra;
     private String estado;
     private String metodoPago;
@@ -37,7 +38,7 @@ public class CompraResponseDTO {
         private UUID idProducto;
         private String nombreProducto;
         private Integer cantidad;
-        private Double precioUnitario;
-        private Double subtotal;
+        private BigDecimal precioUnitario;
+        private BigDecimal subtotal;
     }
 }

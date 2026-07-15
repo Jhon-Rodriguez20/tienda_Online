@@ -21,6 +21,7 @@ import com.fesc.tiendaOnline.model.entity.CategoriaEntity;
 import com.fesc.tiendaOnline.model.entity.ProductoEntity;
 import com.fesc.tiendaOnline.repository.CategoriaRepository;
 import com.fesc.tiendaOnline.repository.ProductoRepository;
+import com.fesc.tiendaOnline.mapper.ProductoMapper;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -34,15 +35,18 @@ public class ProductoService {
     private final ProductoRepository productoRepository;
     private final CategoriaRepository categoriaRepository;
     private final FileStorageService fileStorageService;
+    private final ProductoMapper productoMapper;
 
     public ProductoService(ProductoRepository productoRepository,
                         CategoriaRepository categoriaRepository,
                         FileStorageService fileStorageService,
-                        AdminValidationService adminValidationService) {
+                        AdminValidationService adminValidationService,
+                        ProductoMapper productoMapper) {
         this.productoRepository = productoRepository;
         this.categoriaRepository = categoriaRepository;
         this.fileStorageService = fileStorageService;
         this.adminValidationService = adminValidationService;
+        this.productoMapper = productoMapper;
     }
 
     // LISTAR PRODUCTOS CON PAGINACIÓN - DISPONIBLE PARA TODOS LOS USUARIOS
@@ -96,7 +100,7 @@ public class ProductoService {
 
         Optional<String> terminoOpt = Optional.ofNullable(productoBusquedaDTO.getTermino())
                 .filter(t -> !t.trim().isEmpty())
-                .map(String::trim);
+                .map(t -> t.trim());
         
         Optional<UUID> categoriaIdOpt = Optional.ofNullable(productoBusquedaDTO.getCategoriaId());
 
@@ -202,41 +206,16 @@ public class ProductoService {
 
     // METODO PARA CONVERTIR A RESPONSE EN LA ENTIDAD
     private ProductoResponseDTO convertirAResponseDTO(ProductoEntity producto) {
-        ProductoResponseDTO response = new ProductoResponseDTO();
-        response.setIdProducto(producto.getIdProducto());
-        response.setNombreProducto(producto.getNombreProducto());
-        response.setDescripcionProducto(producto.getDescripcionProducto());
-        response.setPrecioProducto(producto.getPrecioProducto());
-        response.setStockProducto(producto.getStockProducto());
-        response.setUrlImagenProducto(producto.getUrlImagenProducto());
-        response.setNombreCategoria(producto.getCategoria().getNombreCategoria());
-        response.setNombreUsuario(producto.getUsuario().getNombre());
-        
-        return response;
+        return productoMapper.toResponse(producto);
     }
 
     //METDO PARA CONVERTIR A RESPONSE LAS CATEGORIAS DE LOS PRODUCTOS
     private ProductoCategoriaResponseDTO productoCategoriaConvertirAResponse(CategoriaEntity categoriaEntity) {
-        ProductoCategoriaResponseDTO responseDTO = new ProductoCategoriaResponseDTO();
-        responseDTO.setIdCategoria(categoriaEntity.getIdCategoria());
-        responseDTO.setNombreCategoria(categoriaEntity.getNombreCategoria());
-        return responseDTO;
+        return productoMapper.toCategoriaResponse(categoriaEntity);
     }
 
     // METODO PARA CONVERTIR PAGINA DE ENTIDADES A PAGINA DE DTOs
     private PaginacionResponseDTO<ProductoResponseDTO> convertirAPaginacionResponse(Page<ProductoEntity> paginaProductos) {
-        List<ProductoResponseDTO> contenido = paginaProductos.getContent().stream()
-            .map(this::convertirAResponseDTO)
-            .collect(java.util.stream.Collectors.toList());
-        
-        return new PaginacionResponseDTO<>(
-            contenido,
-            paginaProductos.getNumber(),
-            paginaProductos.getSize(),
-            paginaProductos.getTotalElements(),
-            paginaProductos.getTotalPages(),
-            paginaProductos.isLast(),
-            paginaProductos.isFirst()
-        );
+        return productoMapper.toPaginacionResponse(paginaProductos);
     }
 }

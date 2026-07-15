@@ -6,8 +6,12 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,12 +29,6 @@ import com.fesc.tiendaOnline.security.UserDetailsImpl;
 import com.fesc.tiendaOnline.service.UsuarioService;
 
 import jakarta.validation.Valid;
-
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/usuario")
@@ -59,8 +57,8 @@ public class UsuarioController {
 
     @PostMapping("/reenviar-codigo")
     public ResponseEntity<Map<String, String>> reenviarCodigo(@Valid @RequestBody UsuarioReenvioCodigoDTO usuarioReenvioCodigoDTO) {
-        Map<String, String> response = new HashMap<>();
         usuarioService.reenviarCodigoVerificacion(usuarioReenvioCodigoDTO);
+        Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Código de verificación reenviado exitosamente.");
         response.put("status", "success");
         return ResponseEntity.ok(response);
@@ -94,37 +92,34 @@ public class UsuarioController {
     }
 
     @DeleteMapping("/cancelar-cuenta")
-    public ResponseEntity<Map<String, String>> cancelarCuenta(@Valid @RequestBody CancelarCuentaDTO cancelarDTO) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
-        
+    public ResponseEntity<Map<String, String>> cancelarCuenta(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @Valid @RequestBody CancelarCuentaDTO cancelarDTO) {
+
+        UUID idUsuario = principal.getUsuario().getIdUsuario();
         usuarioService.cancelarCuenta(idUsuario, cancelarDTO);
-        
+
         Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Tu cuenta ha sido cancelada exitosamente.");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/perfil")
-    public ResponseEntity<UsuarioPerfilResponseDTO> obtenerPerfil() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
+    public ResponseEntity<UsuarioPerfilResponseDTO> obtenerPerfil(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
 
+        UUID idUsuario = principal.getUsuario().getIdUsuario();
         UsuarioPerfilResponseDTO perfil = usuarioService.obtenerPerfil(idUsuario);
         return ResponseEntity.ok(perfil);
     }
 
     @PutMapping("/perfil")
     public ResponseEntity<UsuarioPerfilResponseDTO> actualizarPerfil(
+            @AuthenticationPrincipal UserDetailsImpl principal,
             @Valid @RequestBody UsuarioUpdateDTO usuarioUpdateDTO) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
-
+                
+        UUID idUsuario = principal.getUsuario().getIdUsuario();
         UsuarioPerfilResponseDTO perfilActualizado = usuarioService.actualizarPerfil(idUsuario, usuarioUpdateDTO);
         return ResponseEntity.ok(perfilActualizado);
     }

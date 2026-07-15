@@ -30,6 +30,7 @@ import com.fesc.tiendaOnline.repository.CompraRepository;
 import com.fesc.tiendaOnline.repository.ProductoRepository;
 import com.fesc.tiendaOnline.repository.ReviewRepository;
 import com.fesc.tiendaOnline.repository.UsuarioRepository;
+import com.fesc.tiendaOnline.mapper.ReviewMapper;
 
 @Service
 public class ReviewService {
@@ -37,8 +38,8 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final ProductoRepository productoRepository;
     private final CompraRepository compraRepository;
-    private final CompraDetalleRepository compraDetalleRepository;
     private final UsuarioRepository usuarioRepository;
+    private final ReviewMapper reviewMapper;
 
     private static final List<Integer> TAMANIOS_PERMITIDOS = Arrays.asList(10, 25, 50);
 
@@ -46,12 +47,13 @@ public class ReviewService {
                          ProductoRepository productoRepository,
                          CompraRepository compraRepository,
                          CompraDetalleRepository compraDetalleRepository,
-                         UsuarioRepository usuarioRepository) {
+                         UsuarioRepository usuarioRepository,
+                         ReviewMapper reviewMapper) {
         this.reviewRepository = reviewRepository;
         this.productoRepository = productoRepository;
         this.compraRepository = compraRepository;
-        this.compraDetalleRepository = compraDetalleRepository;
         this.usuarioRepository = usuarioRepository;
+        this.reviewMapper = reviewMapper;
     }
 
     @Transactional
@@ -186,15 +188,6 @@ public class ReviewService {
     }
 
     private ReviewResponseDTO mapToResponseDTO(ReviewEntity review) {
-        ReviewResponseDTO dto = new ReviewResponseDTO();
-        dto.setIdReview(review.getIdReview());
-        dto.setIdProducto(review.getProducto().getIdProducto());
-        dto.setIdUsuario(review.getUsuario().getIdUsuario());
-        dto.setNombreUsuario(review.getUsuario().getNombre());
-        dto.setEstrellas(review.getEstrellas());
-        dto.setComentario(review.getComentario());
-        dto.setCreatedAt(review.getCreatedAt());
-        dto.setUpdatedAt(review.getUpdatedAt());
-        return dto;
+        return reviewMapper.toResponse(review);
     }
 }

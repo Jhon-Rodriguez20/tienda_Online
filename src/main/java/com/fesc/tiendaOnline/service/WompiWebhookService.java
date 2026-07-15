@@ -3,11 +3,14 @@ package com.fesc.tiendaOnline.service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -26,7 +29,10 @@ public class WompiWebhookService {
     private final ProductoRepository productoRepository;
     private final ObjectMapper objectMapper;
 
-    private final ConcurrentHashMap<String, Boolean> processedEvents = new ConcurrentHashMap<>();
+    private final Cache<String, Boolean> processedEvents = Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterWrite(48, TimeUnit.HOURS)
+            .build();
 
     public WompiWebhookService(WompiConfig wompiConfig,
                                 CompraRepository compraRepository,
@@ -77,7 +83,7 @@ public class WompiWebhookService {
             String claveIdempotencia = wompiTransaccionId + "_" + status;
 
             // 5. Verificar idempotencia
-            if (processedEvents.containsKey(claveIdempotencia)) {
+            if (processedEvents.getIfPresent(claveIdempotencia) != null) {
                 return; // evento ya procesado
             }
 

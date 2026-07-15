@@ -9,8 +9,7 @@ import java.util.regex.Pattern;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,6 +54,7 @@ public class CompraController {
 
     @PostMapping("/realizar")
     public ResponseEntity<?> realizarCompra(
+            @AuthenticationPrincipal UserDetailsImpl principal,
             @Valid @RequestBody CompraRequestDTO requestDTO,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
@@ -70,7 +70,7 @@ public class CompraController {
                     .body(Map.of("error", "El header Idempotency-Key debe ser un UUID v4 válido"));
         }
 
-        // 2.5. Validación condicional de campos Wompi
+        // 3. Validación condicional de campos Wompi
         String wompiTipoPago = requestDTO.getWompiTipoPago();
         if ("CARD".equals(wompiTipoPago) &&
                 (requestDTO.getWompiCardToken() == null || requestDTO.getWompiCardToken().isBlank())) {
@@ -84,12 +84,12 @@ public class CompraController {
                     .body(Map.of("error", "El número de teléfono es obligatorio para pagos con Nequi"));
         }
 
-        UUID usuarioId = obtenerIdUsuarioAutenticado();
+        UUID usuarioId = principal.getUsuario().getIdUsuario();
 
-        // 3. Llamar al servicio
+        // 4. Llamar al servicio
         IdempotencyResult<CompraResponseDTO> result = compraService.realizarCompra(requestDTO, usuarioId, idempotencyKey);
 
-        // 4. Añadir header de replay si aplica
+        // 5. Añadir header de replay si aplica
         HttpHeaders headers = new HttpHeaders();
         if (result.replayed()) {
             headers.add("Idempotency-Replayed", "true");
@@ -99,8 +99,11 @@ public class CompraController {
     }
 
     @PostMapping("/mis-compras")
-    public ResponseEntity<PaginacionResponseDTO<CompraResponseDTO>> getMiscompras(@RequestBody CompraBusquedaDTO busquedaDTO) {
-        UUID usuarioId = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<PaginacionResponseDTO<CompraResponseDTO>> getMiscompras(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody CompraBusquedaDTO busquedaDTO) {
+
+        UUID usuarioId = principal.getUsuario().getIdUsuario();
         PaginacionResponseDTO<CompraResponseDTO> compras = compraService.getMisCompras(usuarioId, busquedaDTO);
         return ResponseEntity.ok(compras);
     }
@@ -111,22 +114,31 @@ public class CompraController {
     }
 
     @GetMapping("/{compraId}")
-    public ResponseEntity<CompraResponseDTO> getCompraById(@PathVariable UUID compraId) {
-        UUID usuarioId = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<CompraResponseDTO> getCompraById(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID compraId) {
+
+        UUID usuarioId = principal.getUsuario().getIdUsuario();
         CompraResponseDTO compraResponseDTO = compraService.getCompraById(compraId, usuarioId);
         return ResponseEntity.ok(compraResponseDTO);
     }
 
     @GetMapping("/{compraId}/pago/estado")
-    public ResponseEntity<WompiPagoEstadoResponseDTO> consultarEstadoPago(@PathVariable UUID compraId) {
-        UUID usuarioId = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<WompiPagoEstadoResponseDTO> consultarEstadoPago(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID compraId) {
+
+        UUID usuarioId = principal.getUsuario().getIdUsuario();
         WompiPagoEstadoResponseDTO estadoPago = wompiService.consultarEstadoPago(compraId, usuarioId);
         return ResponseEntity.ok(estadoPago);
     }
 
     @DeleteMapping("/{compraId}/cancelar")
-    public ResponseEntity<Map<String, String>> cancelarCompra(@PathVariable UUID compraId) {
-        UUID usuarioId = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<Map<String, String>> cancelarCompra(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID compraId) {
+        
+        UUID usuarioId = principal.getUsuario().getIdUsuario();
         compraService.cancelarCompra(compraId, usuarioId);
 
         Map<String, String> response = new HashMap<>();
@@ -136,15 +148,20 @@ public class CompraController {
     }
 
     // ======= ADMIN =================
+
     @PostMapping("/admin/todas")
-    public ResponseEntity<PaginacionResponseDTO<CompraResponseDTO>> getAllCompras(@RequestBody CompraBusquedaDTO compraBusquedaDTO) {
-        UUID idAdmin = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<PaginacionResponseDTO<CompraResponseDTO>> getAllCompras(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody CompraBusquedaDTO compraBusquedaDTO) {
+        
+        UUID idAdmin = principal.getUsuario().getIdUsuario();
         PaginacionResponseDTO<CompraResponseDTO> compras = compraService.getAllCompras(compraBusquedaDTO, idAdmin);
         return ResponseEntity.ok(compras);
     }
 
     @PutMapping("/admin/{compraId}/estado")
     public ResponseEntity<?> actualizarEstadoCompra(
+            @AuthenticationPrincipal UserDetailsImpl principal,
             @PathVariable UUID compraId,
             @Valid @RequestBody ActualizarEstadoCompraDTO request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
@@ -161,9 +178,9 @@ public class CompraController {
                     .body(Map.of("error", "El header Idempotency-Key debe ser un UUID v4 válido"));
         }
 
-        UUID adminId = obtenerIdUsuarioAutenticado();
+        UUID adminId = principal.getUsuario().getIdUsuario();
 
-        // 3. Llamar al servicio — cuando task 5.3 actualice la firma, retornará
+        // 3. Llamar al servicio
         IdempotencyResult<CompraResponseDTO> result = compraService.putEstadoCompra(compraId, request, adminId, idempotencyKey);
 
         // 4. Añadir header de replay si aplica
@@ -173,11 +190,5 @@ public class CompraController {
         }
 
         return new ResponseEntity<>(result.data(), headers, HttpStatus.OK);
-    }
-
-    private UUID obtenerIdUsuarioAutenticado() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetailsImpl = (UserDetailsImpl) authentication.getPrincipal();
-        return userDetailsImpl.getUsuario().getIdUsuario();
     }
 }

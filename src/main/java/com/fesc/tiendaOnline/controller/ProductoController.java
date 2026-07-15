@@ -8,8 +8,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -43,49 +42,53 @@ public class ProductoController {
     }
 
     @GetMapping
-    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> listProductos(@RequestParam(defaultValue = "0") int pagina,
-                                                                    @RequestParam(defaultValue = "10") int tamanio) {
+    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> listProductos(
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "10") int tamanio) {
         if (tamanio != 10 && tamanio != 25 && tamanio != 50) {
             tamanio = 10;
         }
-
         PaginacionResponseDTO<ProductoResponseDTO> productos = productoService.getProductos(pagina, tamanio);
         return ResponseEntity.ok(productos);
     }
 
     @GetMapping("/buscar")
-    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarPorTermino(@RequestParam String termino,
-                                                                    @RequestParam(defaultValue = "0") int pagina,
-                                                                    @RequestParam(defaultValue = "10") int tamanio) {
+    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarPorTermino(
+            @RequestParam String termino,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "10") int tamanio) {
         if (tamanio != 10 && tamanio != 25 && tamanio != 50) {
             tamanio = 10;
         }
-
         PaginacionResponseDTO<ProductoResponseDTO> productos = productoService.buscarProductosPorTermino(termino, pagina, tamanio);
         return ResponseEntity.ok(productos);
     }
 
     @GetMapping("/buscar/nombre")
-    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarPorNombre(@RequestParam String nombre,
-                                                                    @RequestParam(defaultValue = "0") int pagina,
-                                                                    @RequestParam(defaultValue = "10") int tamanio) {
+    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarPorNombre(
+            @RequestParam String nombre,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "10") int tamanio) {
         if (tamanio != 10 && tamanio != 25 && tamanio != 50) {
             tamanio = 10;
         }
-
         PaginacionResponseDTO<ProductoResponseDTO> productos = productoService.buscarProductosPorNombre(nombre, pagina, tamanio);
         return ResponseEntity.ok(productos);
     }
 
     @PostMapping("/buscar/avanzado")
-    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarAvanzado(@RequestBody ProductoBusquedaDTO productoBusquedaDTO) {
+    public ResponseEntity<PaginacionResponseDTO<ProductoResponseDTO>> buscarAvanzado(
+            @RequestBody ProductoBusquedaDTO productoBusquedaDTO) {
+
         PaginacionResponseDTO<ProductoResponseDTO> productos = productoService.buscarProductosAvanzado(productoBusquedaDTO);
         return ResponseEntity.ok(productos);
     }
 
     @GetMapping("/categorias")
-    public ResponseEntity<List<ProductoCategoriaResponseDTO>> listCategorias() {
-        UUID idAdmin = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<List<ProductoCategoriaResponseDTO>> listCategorias(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        UUID idAdmin = principal.getUsuario().getIdUsuario();
         return ResponseEntity.ok(productoService.getCategorias(idAdmin));
     }
 
@@ -95,36 +98,37 @@ public class ProductoController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ProductoResponseDTO> crearProducto(@Valid @ModelAttribute ProductoCreateDTO productoCreateDTO) {
-        UUID idAdmin = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<ProductoResponseDTO> crearProducto(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @Valid @ModelAttribute ProductoCreateDTO productoCreateDTO) {
+
+        UUID idAdmin = principal.getUsuario().getIdUsuario();
         ProductoResponseDTO productoCreado = productoService.crearProducto(productoCreateDTO, idAdmin);
         return new ResponseEntity<>(productoCreado, HttpStatus.CREATED);
     }
 
     @PutMapping(value = "/{idProducto}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ProductoResponseDTO> actualizarProducto(@PathVariable UUID idProducto,
-                                                            @Valid @ModelAttribute ProductoUpdateDTO productoUpdateDTO) {
-        UUID idAdmin = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<ProductoResponseDTO> actualizarProducto(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID idProducto,
+            @Valid @ModelAttribute ProductoUpdateDTO productoUpdateDTO) {
+
+        UUID idAdmin = principal.getUsuario().getIdUsuario();
         ProductoResponseDTO productoActualizado = productoService.actualizarProducto(idProducto, productoUpdateDTO, idAdmin);
         return ResponseEntity.ok(productoActualizado);
     }
 
     @DeleteMapping(value = "/{idProducto}")
-    public ResponseEntity<Map<String, String>> eliminarProducto(@PathVariable UUID idProducto) {
-        UUID idAdmin = obtenerIdUsuarioAutenticado();
+    public ResponseEntity<Map<String, String>> eliminarProducto(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID idProducto) {
+                
+        UUID idAdmin = principal.getUsuario().getIdUsuario();
         productoService.eliminarProducto(idProducto, idAdmin);
 
         Map<String, String> response = new HashMap<>();
         response.put("mensaje", "Producto eliminado exitosamente");
         response.put("status", "success");
-
         return ResponseEntity.ok(response);
-    }
-
-    private UUID obtenerIdUsuarioAutenticado() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetailsImpl = (UserDetailsImpl) authentication.getPrincipal();
-
-        return userDetailsImpl.getUsuario().getIdUsuario();
     }
 }

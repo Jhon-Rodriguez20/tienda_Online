@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tiendaOnline
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Backend (Spring Boot) ──────────────────────────────────────────────────
+  backend:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JDBC_DATABASE_URL: jdbc:postgresql://postgres:5432/tiendaOnline
+      JDBC_DATABASE_USER: ${DB_USER:-postgres}
+      JDBC_DATABASE_PASSWORD: ${DB_PASSWORD:-changeme}
+      JPA_DDL_AUTO: validate
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_PRIVATE_KEY_LOCATION: file:/app/keys/private_key.pem
+      JWT_PUBLIC_KEY_LOCATION: file:/app/keys/public_key.pem
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
+      WOMPI_PUBLIC_KEY: ${WOMPI_PUBLIC_KEY}
+      WOMPI_PRIVATE_KEY: ${WOMPI_PRIVATE_KEY}
+      WOMPI_EVENTS_KEY: ${WOMPI_EVENTS_KEY}
+      WOMPI_INTEGRITY_KEY: ${WOMPI_INTEGRITY_KEY}
+      WOMPI_BASE_URL: ${WOMPI_BASE_URL:-https://sandbox.wompi.co/v1}
+      FILE_UPLOAD_DIR: /opt/tienda-online/uploads
+      HIKARI_MAX_POOL: 20
+      HIKARI_MIN_IDLE: 5
+      LOG_LEVEL_ROOT: WARN
+      LOG_LEVEL_APP: INFO
+      SPRING_PROFILES_ACTIVE: prod
+    volumes:
+      - ./keys:/app/keys:ro
+      - uploads:/opt/tienda-online/uploads
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # ─── Frontend (Nginx + Angular) ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../tiendaOnline_frontend
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:

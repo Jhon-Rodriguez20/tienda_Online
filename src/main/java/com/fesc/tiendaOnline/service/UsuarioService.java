@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fesc.tiendaOnline.exception.BusinessRuleException;
 import com.fesc.tiendaOnline.exception.ConflictException;
 import com.fesc.tiendaOnline.exception.ForbiddenException;
-import com.fesc.tiendaOnline.exception.NotFoundException;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
 import com.fesc.tiendaOnline.model.dto.CambiarContrasenaDTO;
 import com.fesc.tiendaOnline.model.dto.CancelarCuentaDTO;
@@ -30,6 +29,7 @@ import com.fesc.tiendaOnline.model.entity.UsuarioEstado;
 import com.fesc.tiendaOnline.model.entity.UsuarioRolEntity;
 import com.fesc.tiendaOnline.repository.UsuarioCodigoVerificacionRepository;
 import com.fesc.tiendaOnline.repository.UsuarioRepository;
+import com.fesc.tiendaOnline.mapper.UsuarioMapper;
 
 @Service
 public class UsuarioService {
@@ -39,6 +39,7 @@ public class UsuarioService {
     private final EmailService emailService;
     private final UsuarioBloqueadoService bloqueoService;
     private final UsuarioValidationService usuarioValidationService;
+    private final UsuarioMapper usuarioMapper;
 
     @Value("${imagen.perfil.por.defecto}")
     private String imagenPorDefecto;
@@ -53,13 +54,15 @@ public class UsuarioService {
             UsuarioCodigoVerificacionRepository usuarioCodigoVerificacionRepository,
             EmailService emailService,
             UsuarioBloqueadoService bloqueoService,
-            UsuarioValidationService usuarioValidationService) {
+            UsuarioValidationService usuarioValidationService,
+            UsuarioMapper usuarioMapper) {
         
         this.usuarioRepository = usuarioRepository;
         this.usuarioCodigoVerificacionRepository = usuarioCodigoVerificacionRepository;
         this.emailService = emailService;
         this.bloqueoService = bloqueoService;
         this.usuarioValidationService = usuarioValidationService;
+        this.usuarioMapper = usuarioMapper;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -87,7 +90,7 @@ public class UsuarioService {
         UsuarioEntity usuarioGuardado = usuarioRepository.save(usuario);
         generarYEnviarCodigoVerificacion(usuarioGuardado);
 
-        return convertirAResponseDTO(usuarioGuardado);
+        return usuarioMapper.toResponse(usuarioGuardado);
     }
 
     @Transactional
@@ -212,7 +215,7 @@ public class UsuarioService {
             throw new ForbiddenException("La cuenta no se encuentra activa");
         }
 
-        return mapToPerfilResponse(usuario);
+        return usuarioMapper.toPerfilResponse(usuario);
     }
 
     @Transactional
@@ -239,21 +242,7 @@ public class UsuarioService {
         usuario.setCodigoPostal(dto.getCodigoPostal());
 
         UsuarioEntity usuarioActualizado = usuarioRepository.save(usuario);
-        return mapToPerfilResponse(usuarioActualizado);
-    }
-
-    private UsuarioPerfilResponseDTO mapToPerfilResponse(UsuarioEntity usuario) {
-        UsuarioPerfilResponseDTO dto = new UsuarioPerfilResponseDTO();
-        dto.setNombre(usuario.getNombre());
-        dto.setApellido(usuario.getApellido());
-        dto.setEmail(usuario.getEmail());
-        dto.setTelefono(usuario.getTelefono());
-        dto.setPais(usuario.getPais());
-        dto.setDepartamento(usuario.getDepartamento());
-        dto.setCiudad(usuario.getCiudad());
-        dto.setDireccion(usuario.getDireccion());
-        dto.setCodigoPostal(usuario.getCodigoPostal());
-        return dto;
+        return usuarioMapper.toPerfilResponse(usuarioActualizado);
     }
 
     private void manejarIntentoFallidoRecuperacion(UsuarioEntity usuario) {
@@ -287,23 +276,5 @@ public class UsuarioService {
 
         usuarioCodigoVerificacionRepository.save(codigoEntity);
         emailService.enviarCodigoVerificacion(usuario.getEmail(), codigo);
-    }
-
-    private UsuarioResponseDTO convertirAResponseDTO(UsuarioEntity usuarioEntity) {
-        UsuarioResponseDTO responseDTO = new UsuarioResponseDTO();
-        responseDTO.setIdUsuario(usuarioEntity.getIdUsuario());
-        responseDTO.setNombre(usuarioEntity.getNombre());
-        responseDTO.setEmail(usuarioEntity.getEmail());
-        responseDTO.setTelefono(usuarioEntity.getTelefono());
-        responseDTO.setPais(usuarioEntity.getPais());
-        responseDTO.setDireccion(usuarioEntity.getDireccion());
-        responseDTO.setDepartamento(usuarioEntity.getDepartamento());
-        responseDTO.setCiudad(usuarioEntity.getCiudad());
-        responseDTO.setCodigoPostal(usuarioEntity.getCodigoPostal());
-        responseDTO.setEstado(usuarioEntity.getEstado().toString());
-        responseDTO.setRol(usuarioEntity.getUsuarioRol().getRolUsuario());
-        responseDTO.setUrlImagen(usuarioEntity.getUrlImagen());
-        
-        return responseDTO;
     }
 }

@@ -2,7 +2,6 @@ package com.fesc.tiendaOnline.config;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
@@ -46,7 +48,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     @Value("${rate-limit.usuarios.duration-minutes:1}")
     private int usuariosDuration;
 
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
+            .maximumSize(100_000)
+            .expireAfterAccess(5, TimeUnit.MINUTES)
+            .build();
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -57,7 +62,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         String endpoint = determineEndpoint(request.getRequestURI());
         String bucketKey = clientIp + ":" + endpoint;
 
-        Bucket bucket = buckets.computeIfAbsent(bucketKey, k -> createBucket(endpoint));
+        Bucket bucket = buckets.get(bucketKey, k -> createBucket(endpoint));
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
 
         if (probe.isConsumed()) {

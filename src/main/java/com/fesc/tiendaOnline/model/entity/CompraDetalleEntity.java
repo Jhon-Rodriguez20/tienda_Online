@@ -1,5 +1,6 @@
 package com.fesc.tiendaOnline.model.entity;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
@@ -40,9 +41,9 @@ public class CompraDetalleEntity {
     @Column(name = "cantidad", nullable = false)
     private Integer cantidad;
 
-    @Column(name = "precio_unitario", nullable = false)
-    private Double precioUnitario;
+    @Column(name = "precio_unitario", nullable = false, precision = 12, scale = 2)
+    private BigDecimal precioUnitario;
 
-    @Column(name = "subtotal", nullable = false)
-    private Double subtotal;
+    @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
+    private BigDecimal subtotal;
 }

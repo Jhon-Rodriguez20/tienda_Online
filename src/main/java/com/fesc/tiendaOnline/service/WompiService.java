@@ -11,7 +11,6 @@ import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -50,14 +49,8 @@ public class WompiService {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS));
 
-        MappingJackson2HttpMessageConverter jackson2Converter = new MappingJackson2HttpMessageConverter();
-
         this.restClient = RestClient.builder()
                 .requestFactory(requestFactory)
-                .messageConverters(converters -> {
-                    converters.removeIf(c -> c.getClass().getName().contains("Jackson"));
-                    converters.add(0, jackson2Converter);
-                })
                 .build();
     }
 

@@ -53,7 +53,7 @@ class UsuarioServiceProfileTest {
                 usuarioCodigoVerificacionRepository,
                 emailService,
                 bloqueoService,
-                usuarioValidationService);
+                usuarioValidationService, null);
         ReflectionTestUtils.setField(usuarioService, "imagenPorDefecto", "default.png");
     }
 

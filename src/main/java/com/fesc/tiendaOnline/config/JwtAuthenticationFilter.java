@@ -56,6 +56,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // Archivos estáticos
         if (path.startsWith("/uploads/") || path.startsWith("/images/")) return true;
 
+        // Swagger / OpenAPI
+        if (path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) return true;
+
         return false;
     }
 

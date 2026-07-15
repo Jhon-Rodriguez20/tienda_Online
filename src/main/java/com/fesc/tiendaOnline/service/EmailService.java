@@ -5,9 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-
-import com.fesc.tiendaOnline.exception.BusinessRuleException;
 
 @Service
 public class EmailService {
@@ -22,6 +21,7 @@ public class EmailService {
         this.mailSender = mailSender;
     }
 
+    @Async("emailExecutor")
     public void enviarCodigoVerificacion(String email, String codigo) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -39,11 +39,10 @@ public class EmailService {
 
         } catch (Exception e) {
             logger.error("Error al enviar email a {}: {}", email, e.getMessage());
-            throw new BusinessRuleException(
-                    "Error al enviar el correo de verificacion. Por favor, intentalo de nuevo mas tarde.", e);
         }
     }
 
+    @Async("emailExecutor")
     public void enviarCodigoRecuperacion(String email, String codigo) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -63,11 +62,10 @@ public class EmailService {
 
         } catch (Exception e) {
             logger.error("Error al enviar email de recuperacion a {}: {}", email, e.getMessage());
-            throw new BusinessRuleException(
-                    "Error al enviar el correo de recuperacion. Por favor, intentalo de nuevo mas tarde.", e);
         }
     }
 
+    @Async("emailExecutor")
     public void enviarConfirmacionCambioContrasena(String email) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -88,6 +86,7 @@ public class EmailService {
         }
     }
 
+    @Async("emailExecutor")
     public void enviarConfirmacionCancelacionCuenta(String email) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();

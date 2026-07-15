@@ -1,5 +1,6 @@
 package com.fesc.tiendaOnline.model.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,8 +41,8 @@ public class CompraEntity {
     @Column(name = "numero_compra", length = 6, nullable = false, unique = true)
     private String numeroCompra;
 
-    @Column(name = "total_pagado", nullable = false)
-    private Double totalPagado;
+    @Column(name = "total_pagado", nullable = false, precision = 12, scale = 2)
+    private BigDecimal totalPagado;
 
     @Column(name = "fecha_compra", nullable = false)
     private LocalDateTime fechaCompra;

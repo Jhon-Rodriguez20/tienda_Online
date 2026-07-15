@@ -3,8 +3,7 @@ package com.fesc.tiendaOnline.controller;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,21 +33,21 @@ public class ReviewController {
     }
 
     @PostMapping
-    public ResponseEntity<ReviewResponseDTO> crearOActualizarReview(@Valid @RequestBody ReviewCreateDTO reviewCreateDTO) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
+    public ResponseEntity<ReviewResponseDTO> crearOActualizarReview(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @Valid @RequestBody ReviewCreateDTO reviewCreateDTO) {
 
+        UUID idUsuario = principal.getUsuario().getIdUsuario();
         ReviewResponseDTO result = reviewService.crearOActualizar(idUsuario, reviewCreateDTO);
         return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/{idReview}")
-    public ResponseEntity<Void> eliminarReview(@PathVariable UUID idReview) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
+    public ResponseEntity<Void> eliminarReview(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID idReview) {
 
+        UUID idUsuario = principal.getUsuario().getIdUsuario();
         reviewService.eliminar(idReview, idUsuario);
         return ResponseEntity.noContent().build();
     }
@@ -58,6 +57,7 @@ public class ReviewController {
             @PathVariable UUID idProducto,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "10") int tamanio) {
+
         PaginacionResponseDTO<ReviewResponseDTO> result = reviewService.obtenerPorProducto(idProducto, pagina, tamanio);
         return ResponseEntity.ok(result);
     }
@@ -69,11 +69,11 @@ public class ReviewController {
     }
 
     @GetMapping("/producto/{idProducto}/mi-review")
-    public ResponseEntity<ReviewResponseDTO> obtenerMiReview(@PathVariable UUID idProducto) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        UUID idUsuario = userDetails.getUsuario().getIdUsuario();
-
+    public ResponseEntity<ReviewResponseDTO> obtenerMiReview(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @PathVariable UUID idProducto) {
+                
+        UUID idUsuario = principal.getUsuario().getIdUsuario();
         ReviewResponseDTO result = reviewService.obtenerReviewUsuario(idUsuario, idProducto);
         return ResponseEntity.ok(result);
     }
