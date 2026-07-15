@@ -22,4 +22,7 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, UUID> {
 
     @Query("SELECT COUNT(r) FROM ReviewEntity r WHERE r.producto.idProducto = :idProducto")
     Long contarPorProducto(@Param("idProducto") UUID idProducto);
+
+    @Query("SELECT r.estrellas, COUNT(r) FROM ReviewEntity r WHERE r.producto.idProducto = :idProducto GROUP BY r.estrellas")
+    java.util.List<Object[]> contarPorEstrellas(@Param("idProducto") UUID idProducto);
 }

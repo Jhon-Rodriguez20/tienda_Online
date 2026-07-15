@@ -92,6 +92,11 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.getCategorias(idAdmin));
     }
 
+    @GetMapping("/categorias/public")
+    public ResponseEntity<List<ProductoCategoriaResponseDTO>> listCategoriasPublic() {
+        return ResponseEntity.ok(productoService.getCategoriasPublic());
+    }
+
     @GetMapping("/{idProducto}")
     public ResponseEntity<ProductoResponseDTO> findProductoById(@PathVariable UUID idProducto) {
         return ResponseEntity.ok(productoService.getProductoById(idProducto));

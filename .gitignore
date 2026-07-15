@@ -114,25 +114,29 @@ application-prod.properties
 application-test.properties
 !application-example.properties
 
+# Scripts
+scripts/
+scripts/**
+
 # Uploads
-uploads/
-resources/static/uploads/
-src/main/resources/static/uploads/
-uploads/**
-**/uploads/**
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.webp
-*.mp4
-*.mov
-*.pdf
-*.doc
-*.docx
-*.xls
-*.xlsx
-*.zip
+# uploads/
+# resources/static/uploads/
+# src/main/resources/static/uploads/
+# uploads/**
+# **/uploads/**
+# *.jpg
+# *.jpeg
+# *.png
+# *.gif
+# *.webp
+# *.mp4
+# *.mov
+# *.pdf
+# *.doc
+# *.docx
+# *.xls
+# *.xlsx
+# *.zip
 
 # Secrets
 *.key

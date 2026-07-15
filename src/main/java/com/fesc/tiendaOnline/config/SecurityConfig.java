@@ -76,6 +76,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/productos", "/productos/{idProducto}").permitAll()
                 .requestMatchers(HttpMethod.GET, "/productos/buscar", "/productos/buscar/nombre").permitAll()
                 .requestMatchers(HttpMethod.POST, "/productos/buscar/avanzado").permitAll()
+                // Productos Categorias: público para lectura, admin para gestión
+                .requestMatchers(HttpMethod.GET, "/productos/categorias/public").permitAll()
                 // Productos Categorias: solo ADMIN
                 .requestMatchers(HttpMethod.GET, "/productos/categorias").hasRole("ADMIN")
                 // Archivos estáticos

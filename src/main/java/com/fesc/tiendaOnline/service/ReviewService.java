@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -169,6 +170,19 @@ public class ReviewService {
             estadisticas.setPromedioEstrellas(promedioRedondeado.doubleValue());
             estadisticas.setTotalResenas(total);
         }
+
+        // Build star distribution map (1-5)
+        Map<Integer, Long> distribucion = new java.util.LinkedHashMap<>();
+        for (int i = 1; i <= 5; i++) {
+            distribucion.put(i, 0L);
+        }
+        List<Object[]> rows = reviewRepository.contarPorEstrellas(idProducto);
+        for (Object[] row : rows) {
+            Integer estrellas = (Integer) row[0];
+            Long count = (Long) row[1];
+            distribucion.put(estrellas, count);
+        }
+        estadisticas.setDistribucion(distribucion);
 
         return estadisticas;
     }

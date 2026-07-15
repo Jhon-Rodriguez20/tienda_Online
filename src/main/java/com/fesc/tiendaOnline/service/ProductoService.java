@@ -82,10 +82,18 @@ public class ProductoService {
         return convertirAPaginacionResponse(paginaProductos);
     }
 
-    //BUSCAR CATEGORÍAS DE PRODUCTOS
+    //BUSCAR CATEGORÍAS DE PRODUCTOS - ADMIN (con validación)
     @Transactional(readOnly = true)
     public List<ProductoCategoriaResponseDTO> getCategorias(UUID idAdmin) {
         adminValidationService.validarAdmin(idAdmin);
+        return categoriaRepository.findAll().stream()
+            .map(this::productoCategoriaConvertirAResponse)
+            .collect(Collectors.toList());
+    }
+
+    //BUSCAR CATEGORÍAS DE PRODUCTOS - PÚBLICO (sin validación)
+    @Transactional(readOnly = true)
+    public List<ProductoCategoriaResponseDTO> getCategoriasPublic() {
         return categoriaRepository.findAll().stream()
             .map(this::productoCategoriaConvertirAResponse)
             .collect(Collectors.toList());
