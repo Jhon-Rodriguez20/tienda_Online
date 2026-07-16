@@ -11,7 +11,11 @@ public class CambiarContrasenaDTO {
     private String email;
 
     @NotBlank(message = "La nueva contraseña es obligatoria")
-    @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres")
+    @Size(min = 8, message = "La contraseña debe tener al menos 8 caracteres")
+    @jakarta.validation.constraints.Pattern(
+        regexp = "^(?=.*[a-zA-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}$",
+        message = "La contraseña debe contener al menos una letra, un número y un carácter especial"
+    )
     private String nuevaContrasena;
 
     @NotBlank(message = "Las contraseñas no coinciden")

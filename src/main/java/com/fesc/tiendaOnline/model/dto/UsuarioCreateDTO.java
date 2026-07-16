@@ -17,7 +17,11 @@ public class UsuarioCreateDTO {
     private String email;
 
     @NotBlank(message = "La contraseña es obligatoria")
-    @Size(min = 6, max = 100, message = "La contraseña debe tener al menos 6 caracteres")    
+    @Size(min = 8, max = 100, message = "La contraseña debe tener al menos 8 caracteres")
+    @jakarta.validation.constraints.Pattern(
+        regexp = "^(?=.*[a-zA-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}$",
+        message = "La contraseña debe contener al menos una letra, un número y un carácter especial"
+    )
     private String contrasena;
 
     @NotBlank(message = "El teléfono es obligatorio")

@@ -193,6 +193,15 @@ public class ReviewService {
         productoRepository.findById(idProducto)
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
 
+        // Check if user has a qualifying purchase
+        List<CompraEstado> estadosValidos = Arrays.asList(CompraEstado.ACEPTADO, CompraEstado.ENTREGADO);
+        boolean tieneCompraValida = compraRepository.existsByUsuarioAndEstadoAndProducto(
+                idUsuario, estadosValidos, idProducto);
+
+        if (!tieneCompraValida) {
+            throw new ForbiddenException("Solo puedes reseñar productos que hayas comprado");
+        }
+
         // Find review by user and product
         ReviewEntity review = reviewRepository
                 .findByUsuarioIdUsuarioAndProductoIdProducto(idUsuario, idProducto)
