@@ -256,20 +256,49 @@ public class CompraService {
         
         if (busqueda.getNumeroCompra() != null && !busqueda.getNumeroCompra().isEmpty()) {
             Optional<CompraEntity> compra = compraRepository.findByUsuarioIdAndNumeroCompra(usuarioId, busqueda.getNumeroCompra());
-            paginaCompras = compra
-                .<Page<CompraEntity>>map(c -> new PageImpl<>(List.of(c), pageable, 1))
-                .orElseGet(() -> Page.empty(pageable));
-        
-        } else if (busqueda.getFechaInicio() != null && busqueda.getFechaFin() != null) {
-            paginaCompras = compraRepository.findByUsuarioIdAndFechaBetween(usuarioId,
-                busqueda.getFechaInicio(), busqueda.getFechaFin(), pageable);
-        
-        } else if (busqueda.getEstado() != null && !busqueda.getEstado().isEmpty()) {
-            CompraEstado estado = CompraEstado.valueOf(busqueda.getEstado().toUpperCase());
-            paginaCompras = compraRepository.findByUsuarioIdAndEstado(usuarioId, estado, pageable);
-
+            
+            // Si también hay filtro de estado, verificar que coincida
+            if (compra.isPresent() && busqueda.getEstado() != null && !busqueda.getEstado().isEmpty()) {
+                CompraEstado estadoFiltro = CompraEstado.valueOf(busqueda.getEstado().toUpperCase());
+                if (!compra.get().getCompraEstado().equals(estadoFiltro)) {
+                    paginaCompras = Page.empty(pageable);
+                } else {
+                    paginaCompras = new PageImpl<>(List.of(compra.get()), pageable, 1);
+                }
+            } else {
+                paginaCompras = compra
+                    .<Page<CompraEntity>>map(c -> new PageImpl<>(List.of(c), pageable, 1))
+                    .orElseGet(() -> Page.empty(pageable));
+            }
         } else {
-            paginaCompras = compraRepository.findByUsuarioId(usuarioId, pageable);
+            // Filtros combinados: estado + fechas
+            CompraEstado estado = null;
+            if (busqueda.getEstado() != null && !busqueda.getEstado().isEmpty()) {
+                estado = CompraEstado.valueOf(busqueda.getEstado().toUpperCase());
+            }
+
+            boolean tieneFechas = busqueda.getFechaInicio() != null && busqueda.getFechaFin() != null;
+
+            if (estado != null && tieneFechas) {
+                paginaCompras = compraRepository.findByUsuarioIdWithEstadoAndFechas(
+                    usuarioId,
+                    estado,
+                    busqueda.getFechaInicio(),
+                    busqueda.getFechaFin(),
+                    pageable
+                );
+            } else if (estado != null) {
+                paginaCompras = compraRepository.findByUsuarioIdAndEstado(usuarioId, estado, pageable);
+            } else if (tieneFechas) {
+                paginaCompras = compraRepository.findByUsuarioIdAndFechaBetween(
+                    usuarioId,
+                    busqueda.getFechaInicio(),
+                    busqueda.getFechaFin(),
+                    pageable
+                );
+            } else {
+                paginaCompras = compraRepository.findByUsuarioId(usuarioId, pageable);
+            }
         }
         
         return convertirAPaginacionResponse(paginaCompras);
@@ -336,22 +365,50 @@ public class CompraService {
         Pageable pageable = PageRequest.of(compraBusquedaDTO.getPagina(), compraBusquedaDTO.getTamanio());
         Page<CompraEntity> paginaCompras;
 
+        // Si hay número de compra, buscar exactamente (puede combinarse con estado)
         if (compraBusquedaDTO.getNumeroCompra() != null && !compraBusquedaDTO.getNumeroCompra().isEmpty()) {
             Optional<CompraEntity> compra = compraRepository.findByNumeroCompra(compraBusquedaDTO.getNumeroCompra());
-            paginaCompras = compra
-                .<Page<CompraEntity>>map(c -> new PageImpl<>(List.of(c), pageable, 1))
-                .orElseGet(() -> Page.empty(pageable));
-        
-        } else if (compraBusquedaDTO.getFechaInicio() != null && compraBusquedaDTO.getFechaFin() != null) {
-            paginaCompras = compraRepository.findByFechaBetween(
-                compraBusquedaDTO.getFechaInicio(), compraBusquedaDTO.getFechaFin(), pageable);
-        
-        } else if (compraBusquedaDTO.getEstado() != null && !compraBusquedaDTO.getEstado().isEmpty()) {
-            CompraEstado estado = CompraEstado.valueOf(compraBusquedaDTO.getEstado().toUpperCase());
-            paginaCompras = compraRepository.findByEstado(estado, pageable);
-
+            
+            // Si también hay filtro de estado, verificar que coincida
+            if (compra.isPresent() && compraBusquedaDTO.getEstado() != null && !compraBusquedaDTO.getEstado().isEmpty()) {
+                CompraEstado estadoFiltro = CompraEstado.valueOf(compraBusquedaDTO.getEstado().toUpperCase());
+                if (!compra.get().getCompraEstado().equals(estadoFiltro)) {
+                    paginaCompras = Page.empty(pageable);
+                } else {
+                    paginaCompras = new PageImpl<>(List.of(compra.get()), pageable, 1);
+                }
+            } else {
+                paginaCompras = compra
+                    .<Page<CompraEntity>>map(c -> new PageImpl<>(List.of(c), pageable, 1))
+                    .orElseGet(() -> Page.empty(pageable));
+            }
         } else {
-            paginaCompras = compraRepository.findAllWithDetails(pageable);
+            // Filtros combinados: estado + fechas
+            CompraEstado estado = null;
+            if (compraBusquedaDTO.getEstado() != null && !compraBusquedaDTO.getEstado().isEmpty()) {
+                estado = CompraEstado.valueOf(compraBusquedaDTO.getEstado().toUpperCase());
+            }
+
+            boolean tieneFechas = compraBusquedaDTO.getFechaInicio() != null && compraBusquedaDTO.getFechaFin() != null;
+
+            if (estado != null && tieneFechas) {
+                paginaCompras = compraRepository.findAllWithEstadoAndFechas(
+                    estado,
+                    compraBusquedaDTO.getFechaInicio(),
+                    compraBusquedaDTO.getFechaFin(),
+                    pageable
+                );
+            } else if (estado != null) {
+                paginaCompras = compraRepository.findByEstado(estado, pageable);
+            } else if (tieneFechas) {
+                paginaCompras = compraRepository.findByFechaBetween(
+                    compraBusquedaDTO.getFechaInicio(),
+                    compraBusquedaDTO.getFechaFin(),
+                    pageable
+                );
+            } else {
+                paginaCompras = compraRepository.findAllWithDetails(pageable);
+            }
         }
 
         return convertirAPaginacionResponse(paginaCompras);

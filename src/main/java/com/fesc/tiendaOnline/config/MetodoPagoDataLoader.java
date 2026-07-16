@@ -17,7 +17,7 @@ public class MetodoPagoDataLoader implements CommandLineRunner {
     
     @Override
     public void run(String... args) throws Exception {
-        crearMetodoPagoSiNoExiste("Bancolombia");
+        crearMetodoPagoSiNoExiste("Bancolombia transferencia");
         crearMetodoPagoSiNoExiste("Nequi");
         crearMetodoPagoSiNoExiste("Tarjeta Débito o Crédito");
     }
