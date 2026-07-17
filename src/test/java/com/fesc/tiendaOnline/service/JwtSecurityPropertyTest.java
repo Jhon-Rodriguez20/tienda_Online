@@ -2,6 +2,7 @@ package com.fesc.tiendaOnline.service;
 
 import com.fesc.tiendaOnline.component.JwtBlacklist;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
+import com.fesc.tiendaOnline.model.dto.AuthResult;
 import com.fesc.tiendaOnline.model.dto.LoginResponseDTO;
 import com.fesc.tiendaOnline.model.entity.RefreshTokenEntity;
 import com.fesc.tiendaOnline.model.entity.UsuarioEntity;
@@ -11,7 +12,6 @@ import net.jqwik.api.*;
 import net.jqwik.api.constraints.LongRange;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.springframework.http.ResponseEntity;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -102,7 +102,7 @@ class JwtSecurityPropertyTest {
         );
 
         // Act
-        ResponseEntity<LoginResponseDTO> response = authService.refreshAccessToken(tokenValue);
+        AuthResult result = authService.refreshAccessToken(tokenValue);
 
         // Assert 1: revokeAllByUsuarioIdUsuario was called with the correct user ID
         Mockito.verify(refreshTokenRepo).revokeAllByUsuarioIdUsuario(userId);
@@ -114,20 +114,19 @@ class JwtSecurityPropertyTest {
                 .as("New refresh token must differ from the old one")
                 .isNotEqualTo(tokenValue);
 
-        // Assert 3: response body contains the new refresh token
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getRefreshToken())
-                .as("Response body must contain the new refresh token")
+        // Assert 3: response body contains null refreshToken (now in cookie)
+        assertThat(result.responseBody()).isNotNull();
+        assertThat(result.refreshToken())
+                .as("AuthResult must contain the new refresh token for the cookie")
                 .isNotNull()
                 .isNotBlank()
                 .isEqualTo(savedToken.getToken());
 
-        // Assert 4: Authorization header contains a Bearer token
-        String authHeader = response.getHeaders().getFirst("Authorization");
-        assertThat(authHeader)
-                .as("Authorization header must be present and start with 'Bearer '")
+        // Assert 4: accessToken is present in the AuthResult
+        assertThat(result.accessToken())
+                .as("AuthResult must contain the access token")
                 .isNotNull()
-                .startsWith("Bearer ");
+                .startsWith("mocked.access.token");
     }
 
     @Property(tries = 50)

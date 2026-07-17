@@ -128,10 +128,14 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
+        // Reject wildcard origins (incompatible with allowCredentials=true)
+        List<String> originsToUse = allowedOrigins.stream()
+                .filter(origin -> !"*".equals(origin))
+                .collect(Collectors.toList());
+
         // REDIRECCIONAR DE HTTP A HTTPS PARA PRODUCCION
-        List<String> originsToUse = allowedOrigins;
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
-            originsToUse = allowedOrigins.stream()
+            originsToUse = originsToUse.stream()
                     .filter(origin -> origin.startsWith("https://"))
                     .collect(Collectors.toList());
         }
@@ -144,7 +148,8 @@ public class SecurityConfig {
         ));
         configuration.setExposedHeaders(Arrays.asList(
             "Authorization", "Idempotency-Replayed",
-            "X-RateLimit-Remaining", "X-RateLimit-Limit", "Retry-After"
+            "X-RateLimit-Remaining", "X-RateLimit-Limit", "Retry-After",
+            "Set-Cookie"
         ));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

@@ -3,14 +3,13 @@ package com.fesc.tiendaOnline.service;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fesc.tiendaOnline.component.JwtBlacklist;
 import com.fesc.tiendaOnline.exception.UnauthorizedException;
+import com.fesc.tiendaOnline.model.dto.AuthResult;
 import com.fesc.tiendaOnline.model.dto.LoginRequestDTO;
 import com.fesc.tiendaOnline.model.dto.LoginResponseDTO;
 import com.fesc.tiendaOnline.model.entity.RefreshTokenEntity;
@@ -45,7 +44,7 @@ public class AuthService {
     }
 
     @Transactional
-    public ResponseEntity<LoginResponseDTO> refreshAccessToken(String refreshTokenValue) {
+    public AuthResult refreshAccessToken(String refreshTokenValue) {
         RefreshTokenEntity refreshToken = refreshTokenRepository.findByToken(refreshTokenValue)
                 .orElseThrow(() -> new UnauthorizedException("Refresh token inválido"));
 
@@ -79,16 +78,13 @@ public class AuthService {
         response.setRol(usuario.getUsuarioRol().getRolUsuario());
         response.setUrlImagen(usuario.getUrlImagen());
         response.setExpiraEn(jwtService.getExpirationTimeToken());
-        response.setRefreshToken(newRefreshToken.getToken());
+        response.setRefreshToken(null);
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + newAccessToken)
-                .header("Access-Control-Expose-Headers", HttpHeaders.AUTHORIZATION)
-                .body(response);
+        return new AuthResult(newAccessToken, newRefreshToken.getToken(), response);
     }
 
     @Transactional
-    public ResponseEntity<LoginResponseDTO> login(LoginRequestDTO loginRequest) {
+    public AuthResult login(LoginRequestDTO loginRequest) {
         UsuarioEntity usuario = usuarioValidationService.obtenerUsuarioPorEmailConRol(loginRequest.getEmail());
         usuarioValidationService.validarUsuarioActivo(usuario,
                 "Usuario no activo. Debes verificar tu cuenta primero");
@@ -123,11 +119,8 @@ public class AuthService {
         response.setDireccion(usuario.getDireccion());
         response.setCodigoPostal(usuario.getCodigoPostal() != null ? usuario.getCodigoPostal() : "No disponible");
         response.setExpiraEn(jwtService.getExpirationTimeToken());
-        response.setRefreshToken(refreshTokenEntity.getToken());
+        response.setRefreshToken(null);
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .header("Access-Control-Expose-Headers", HttpHeaders.AUTHORIZATION)
-                .body(response);
+        return new AuthResult(token, refreshTokenEntity.getToken(), response);
     }
 }
