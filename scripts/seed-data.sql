@@ -68,7 +68,7 @@ SELECT
     'Descripción detallada del producto número ' || s.i || '. Alta calidad y garantía incluida.',
     round((random() * 495000 + 5000)::numeric, 2),
     (random() * 490 + 10)::int,
-    '/uploads/ea12203d-a907-4d70-a2df-96cf55dafe71.jpg',
+    '/uploads/ea12203d-a907-4d70-a2df-96cf55dafe71.webp',
     (SELECT id_categoria FROM categoria ORDER BY id_categoria OFFSET ((s.i - 1) % 8) LIMIT 1),
     (SELECT id_usuario FROM usuario WHERE email = 'developjarz@gmail.com' LIMIT 1)
 FROM generate_series(1, 200) AS s(i)
