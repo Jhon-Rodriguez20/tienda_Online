@@ -27,9 +27,8 @@ public class EmailService {
     @Value("${brevo.sender.name}")
     private String senderName;
 
-    public EmailService(RestClient.Builder restClientBuilder,
-                        @Value("${brevo.api.url}") String apiUrl) {
-        this.restClient = restClientBuilder
+    public EmailService(@Value("${brevo.api.url}") String apiUrl) {
+        this.restClient = RestClient.builder()
                 .baseUrl(apiUrl)
                 .build();
     }
