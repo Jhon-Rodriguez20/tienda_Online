@@ -1,109 +1,106 @@
 package com.fesc.tiendaOnline.service;
 
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
 @Service
 public class EmailService {
 
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
-    private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
-    private String fromEmail;
+    private final RestClient restClient;
 
-    public EmailService(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
+    @Value("${brevo.api.key}")
+    private String apiKey;
+
+    @Value("${brevo.sender.email}")
+    private String senderEmail;
+
+    @Value("${brevo.sender.name}")
+    private String senderName;
+
+    public EmailService(RestClient.Builder restClientBuilder,
+                        @Value("${brevo.api.url}") String apiUrl) {
+        this.restClient = restClientBuilder
+                .baseUrl(apiUrl)
+                .build();
     }
 
     @Async("emailExecutor")
     public void enviarCodigoVerificacion(String email, String codigo) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(email);
-            message.setSubject("Codigo de Verificacion - Tienda Online");
-            message.setText("Hola,\n\n"
-                    + "Tu codigo de verificacion es: " + codigo + "\n\n"
-                    + "Este codigo expirara en 15 minutos.\n\n"
-                    + "Si no solicitaste este codigo, ignora este mensaje.\n\n"
-                    + "Saludos,\n"
-                    + "Equipo Tienda Online");
-            mailSender.send(message);
-            logger.info("Correo de verificacion enviado a {}", email);
-
-        } catch (Exception e) {
-            logger.error("Error al enviar email a {}: {}", email, e.getMessage());
-        }
+        String asunto = "Codigo de Verificacion - Tienda Online";
+        String cuerpo = "Hola,\n\n"
+                + "Tu codigo de verificacion es: " + codigo + "\n\n"
+                + "Este codigo expirara en 15 minutos.\n\n"
+                + "Si no solicitaste este codigo, ignora este mensaje.\n\n"
+                + "Saludos,\nEquipo Tienda Online";
+        enviar(email, asunto, cuerpo);
     }
 
     @Async("emailExecutor")
     public void enviarCodigoRecuperacion(String email, String codigo) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(email);
-            message.setSubject("Recuperacion de Contrasena - Tienda Online");
-            message.setText("Hola,\n\n"
-                    + "Has solicitado recuperar tu contrasena.\n\n"
-                    + "Tu codigo de verificacion es: " + codigo + "\n\n"
-                    + "Este codigo expirara en 15 minutos.\n\n"
-                    + "Si no solicitaste este cambio, ignora este mensaje.\n\n"
-                    + "Saludos,\n"
-                    + "Equipo Tienda Online");
-
-            mailSender.send(message);
-            logger.info("Codigo de recuperacion enviado a: {}", email);
-
-        } catch (Exception e) {
-            logger.error("Error al enviar email de recuperacion a {}: {}", email, e.getMessage());
-        }
+        String asunto = "Recuperacion de Contrasena - Tienda Online";
+        String cuerpo = "Hola,\n\n"
+                + "Has solicitado recuperar tu contrasena.\n\n"
+                + "Tu codigo de verificacion es: " + codigo + "\n\n"
+                + "Este codigo expirara en 15 minutos.\n\n"
+                + "Si no solicitaste este cambio, ignora este mensaje.\n\n"
+                + "Saludos,\nEquipo Tienda Online";
+        enviar(email, asunto, cuerpo);
     }
 
     @Async("emailExecutor")
     public void enviarConfirmacionCambioContrasena(String email) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(email);
-            message.setSubject("Contrasena Actualizada - Tienda Online");
-            message.setText("Hola,\n\n"
-                    + "Tu contrasena ha sido actualizada exitosamente.\n\n"
-                    + "Si no realizaste este cambio, contacta inmediatamente con soporte.\n\n"
-                    + "Saludos,\n"
-                    + "Equipo Tienda Online");
-
-            mailSender.send(message);
-            logger.info("Correo de confirmacion de cambio de contrasena enviado a: {}", email);
-
-        } catch (Exception e) {
-            logger.error("Error al enviar confirmacion a {}: {}", email, e.getMessage());
-        }
+        String asunto = "Contrasena Actualizada - Tienda Online";
+        String cuerpo = "Hola,\n\n"
+                + "Tu contrasena ha sido actualizada exitosamente.\n\n"
+                + "Si no realizaste este cambio, contacta inmediatamente con soporte.\n\n"
+                + "Saludos,\nEquipo Tienda Online";
+        enviar(email, asunto, cuerpo);
     }
 
     @Async("emailExecutor")
     public void enviarConfirmacionCancelacionCuenta(String email) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(email);
-            message.setSubject("Cuenta Cancelada - Tienda Online");
-            message.setText("Hola,\n\n"
-                    + "Tu cuenta ha sido cancelada exitosamente.\n\n"
-                    + "Sentimos verte partir. Si fue un error, contacta con soporte.\n\n"
-                    + "Saludos,\n"
-                    + "Equipo Tienda Online");
+        String asunto = "Cuenta Cancelada - Tienda Online";
+        String cuerpo = "Hola,\n\n"
+                + "Tu cuenta ha sido cancelada exitosamente.\n\n"
+                + "Sentimos verte partir. Si fue un error, contacta con soporte.\n\n"
+                + "Saludos,\nEquipo Tienda Online";
+        enviar(email, asunto, cuerpo);
+    }
 
-            mailSender.send(message);
-            logger.info("Correo de confirmacion de cancelacion enviado a: {}", email);
+    /**
+     * Realiza la llamada HTTP a la API transaccional de Brevo.
+     * Documentación: https://developers.brevo.com/reference/sendtransacemail
+     */
+    private void enviar(String destinatario, String asunto, String cuerpo) {
+        try {
+            Map<String, Object> payload = Map.of(
+                    "sender", Map.of("name", senderName, "email", senderEmail),
+                    "to", List.of(Map.of("email", destinatario)),
+                    "subject", asunto,
+                    "textContent", cuerpo
+            );
+
+            restClient.post()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("api-key", apiKey)
+                    .body(payload)
+                    .retrieve()
+                    .toBodilessEntity();
+
+            logger.info("Correo enviado via Brevo API a {}", destinatario);
 
         } catch (Exception e) {
-            logger.error("Error al enviar confirmacion de cancelacion a {}: {}", email, e.getMessage());
+            logger.error("Error al enviar correo via Brevo API a {}: {}", destinatario, e.getMessage());
         }
     }
 }

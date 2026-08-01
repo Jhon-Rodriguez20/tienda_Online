@@ -30,8 +30,9 @@ services:
       JDBC_DATABASE_USER: ${DB_USER:-postgres}
       JDBC_DATABASE_PASSWORD: ${DB_PASSWORD:-changeme}
       JPA_DDL_AUTO: validate
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-Tienda Online}
       JWT_PRIVATE_KEY_LOCATION: file:/app/keys/private_key.pem
       JWT_PUBLIC_KEY_LOCATION: file:/app/keys/public_key.pem
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
